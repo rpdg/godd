@@ -1,7 +1,10 @@
+//go:build windows
+
 package godd
 
 // VirtualKey represents a custom virtual key code defined by the DD.dll driver.
-// These codes map to specific keyboard keys and are not standard Windows VK_* values.
+// These codes map to specific keyboard keys and are not standard Windows VK_*
+// values. Use DD.ToDDCode to convert a Windows VK_* value to a DD key code.
 type VirtualKey int
 
 // VK (Virtual Key)
