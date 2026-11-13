@@ -13,7 +13,8 @@ import (
 	"unsafe"
 )
 
-// ErrClosed is returned by DD methods after Close has been called.
+// ErrClosed is returned by DD methods after Close has been called, and by
+// GetDD once the process-wide instance has been closed.
 var ErrClosed = errors.New("godd: DD driver is closed")
 
 // procCaller is the subset of syscall.Proc used by DD. It is an interface so
@@ -25,7 +26,7 @@ type procCaller interface {
 // DD represents the DD driver wrapper.
 // It encapsulates DLL operations for mouse and keyboard simulation.
 //
-// A DD must be created with New or GetDD; the zero value is not usable.
+// A DD must be created with GetDD; the zero value is not usable.
 type DD struct {
 	dll *syscall.DLL
 
@@ -87,17 +88,16 @@ var (
 	defaultDD *DD
 )
 
-// New loads the DD DLL at dllPath and initializes the driver.
+// newDD loads the DD DLL at dllPath and initializes the driver.
 //
-// The DLL file name changes between official DD releases, so callers should
-// pass the actual path from the downloaded package rather than depending on a
-// particular version. Each successful New call returns an independent
-// instance; use Close to release it.
+// The DLL file name changes between official DD releases, so callers pass the
+// actual path from the downloaded package rather than depending on a
+// particular version.
 //
 // The DLL is loaded with syscall.LoadDLL and all exports are resolved up
 // front. syscall.NewLazyDLL is not used because it has no unload API, while
 // Close must be able to release the module.
-func New(dllPath string) (*DD, error) {
+func newDD(dllPath string) (*DD, error) {
 	if dllPath == "" {
 		return nil, errors.New("godd: DLL path is empty")
 	}
@@ -115,26 +115,32 @@ func New(dllPath string) (*DD, error) {
 	return d, nil
 }
 
-// GetDD returns a process-wide shared DD instance.
+// GetDD returns the process-wide DD instance, loading the DLL on first use.
 //
-// The first successful call creates the instance. Later calls return the same
-// instance and ignore dllPath. Failed initialization is not cached: a later
-// call can retry with a corrected path. Close resets the shared instance, so
-// the driver can be initialized again afterwards.
+// GetDD is the only public constructor. The DD driver controls the session's
+// global cursor and keyboard state, and some official DLL builds allow only one
+// successful initialization per process, so multiple instances are neither
+// independent nor reliably possible. All input methods share one lock, which
+// makes compound operations atomic across the whole process.
 //
-// Prefer New when the caller needs explicit ownership or multiple instances.
+// The first successful call loads dllPath and initializes the driver. Later
+// calls return the same instance and ignore dllPath. Failed initialization is
+// not cached: a later call can retry with a corrected path.
+//
+// Close is terminal. After Close, GetDD returns ErrClosed and does not reload
+// the vendor DLL; restart the process to use DD again.
 func GetDD(dllPath string) (*DD, error) {
 	defaultMu.Lock()
 	defer defaultMu.Unlock()
 
 	if defaultDD != nil {
-		if !defaultDD.isClosed() {
-			return defaultDD, nil
+		if defaultDD.isClosed() {
+			return nil, ErrClosed
 		}
-		defaultDD = nil
+		return defaultDD, nil
 	}
 
-	d, err := New(dllPath)
+	d, err := newDD(dllPath)
 	if err != nil {
 		return nil, err
 	}
@@ -479,13 +485,21 @@ func (d *DD) ToDDCode(vk int) (VirtualKey, error) {
 	return VirtualKey(code), nil
 }
 
-// Close releases the DD driver. It is safe to call more than once.
-// When the instance is the process-wide singleton returned by GetDD, Close
-// also resets that singleton so a later GetDD call can initialize again.
+// Close terminates the DD instance and releases the DLL. It is safe to call
+// more than once.
+//
+// Deprecated: Close is normally unnecessary; the DLL remains loaded until
+// process exit. It is retained for compatibility and for tests that need
+// deterministic teardown.
+//
+// Close is terminal for the process-wide singleton returned by GetDD: the
+// shared reference is kept in a closed state, so later GetDD calls return
+// ErrClosed instead of reloading the vendor DLL. This matches official DLL
+// builds that allow only one successful initialization per process.
 //
 // Close and GetDD both take defaultMu before d.mu. The shared reference is
-// cleared before the DLL is released, so GetDD cannot return an instance whose
-// Close has already unloaded the module.
+// retained while the DLL is released, so GetDD cannot return an open instance
+// after Close.
 func (d *DD) Close() error {
 	defaultMu.Lock()
 	defer defaultMu.Unlock()
@@ -497,9 +511,8 @@ func (d *DD) Close() error {
 		return nil
 	}
 	d.closed = true
-	if defaultDD == d {
-		defaultDD = nil
-	}
+	// Keep defaultDD pointing at this instance. GetDD sees that it is closed
+	// and returns ErrClosed instead of silently reinitializing the singleton.
 
 	if d.dll == nil {
 		return nil

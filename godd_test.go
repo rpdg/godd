@@ -392,8 +392,8 @@ func TestCloseIsIdempotentAndMethodsReturnErrClosed(t *testing.T) {
 	}
 }
 
-func TestNewRejectsEmptyPath(t *testing.T) {
-	if _, err := New(""); err == nil {
+func TestNewDDRejectsEmptyPath(t *testing.T) {
+	if _, err := newDD(""); err == nil {
 		t.Fatal("expected an error for an empty DLL path")
 	}
 }
@@ -421,7 +421,7 @@ func TestGetDDFailedInitializationIsNotCached(t *testing.T) {
 	}
 }
 
-func TestGetDDDoesNotReturnClosedInstance(t *testing.T) {
+func TestGetDDAfterCloseReturnsErrClosed(t *testing.T) {
 	defaultMu.Lock()
 	old := defaultDD
 	d := &DD{closed: true}
@@ -437,8 +437,8 @@ func TestGetDDDoesNotReturnClosedInstance(t *testing.T) {
 	if got != nil {
 		t.Fatalf("GetDD returned closed instance %p", got)
 	}
-	if err == nil {
-		t.Fatal("expected GetDD to reinitialize instead of returning the closed instance")
+	if !errors.Is(err, ErrClosed) {
+		t.Fatalf("GetDD after Close returned %v, want ErrClosed", err)
 	}
 }
 
@@ -474,7 +474,7 @@ func TestCombineErrorsPreservesErrorIdentity(t *testing.T) {
 	}
 }
 
-func TestCloseClearsSharedInstance(t *testing.T) {
+func TestCloseKeepsSharedInstanceClosed(t *testing.T) {
 	defaultMu.Lock()
 	old := defaultDD
 	d := &DD{}
@@ -493,7 +493,11 @@ func TestCloseClearsSharedInstance(t *testing.T) {
 	defaultMu.Lock()
 	shared := defaultDD
 	defaultMu.Unlock()
-	if shared != nil {
-		t.Fatal("Close must clear the shared instance")
+	if shared != d {
+		t.Fatal("Close must retain the shared instance in a closed state")
+	}
+
+	if _, err := GetDD(""); !errors.Is(err, ErrClosed) {
+		t.Fatalf("GetDD after Close returned %v, want ErrClosed", err)
 	}
 }
