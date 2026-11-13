@@ -38,6 +38,7 @@ the repository documentation or tests.
 | --- | --- |
 | `cmd/ddprobe` | Minimal wrapper-level probe: cursor control, relative/absolute move, buttons, wheel, key injection, `ToDDCode`, `Close`, and terminal singleton behavior. |
 | `cmd/dde2e` | GUI integration test: creates a window and edit control, moves/clicks with DD, then verifies focus and text produced by `DD_str`, `PressHotkey`, `PressKey`, and `ToDDCode`. |
+| `cmd/ddutf8` | Calls the vendor `DD_str` export with raw byte sequences and reads the edit text back, documenting ASCII, UTF-8, GBK, control-byte, and NUL handling. |
 | `cmd/hidprobe` | Low-level HID inspection without loading the vendor DLL: enumerate collections, query caps, test access/share modes, and write raw vendor reports. |
 
 Typical commands (run from the repository root):
@@ -57,6 +58,9 @@ go run ./cmd/dde2e -dll .\ddhid.63340.dll
 
 # Keyboard-only run (when mouse reports are not injected)
 go run ./cmd/dde2e -dll .\ddhid.63340.dll -skip-mouse
+
+# Raw DD_str byte handling (UTF-8, GBK, UTF-16LE, control bytes, NUL)
+go run ./cmd/ddutf8 -dll .\ddhid.63340.dll
 
 # HID collections used by DD
 go run ./cmd/hidprobe
@@ -189,6 +193,15 @@ stale device and stopping the certificate tool, the same DLL/driver pair
 injected mouse input normally. Treat a mouse failure as an environment issue
 first: check for stale devices/services and collection holders, then rerun.
 
+### DD_str byte handling
+
+`cmd/ddutf8` calls `DD_str` directly, bypassing `InputString`'s ASCII guard. On
+the tested HID DLL, printable ASCII `0x20-0x7E` is typed literally, while UTF-8,
+GBK, CP1252, and control bytes are silently skipped. Mixed input such as
+`a<E4><B8><AD>b` becomes `ab`, and `DD_str` still returns `1`. Embedded NUL
+truncates the C string. See [dd-str-byte-behavior.md](dd-str-byte-behavior.md)
+for the full table and implications.
+
 ### Simple mode (`dd43390.dll` / official `dd63330.dll`)
 
 | Check | Result |
@@ -232,5 +245,8 @@ active.
 - The tested HID DLL cannot be initialized twice in one process. GoDD exposes a
   terminal singleton (`GetDD` after `Close` returns `ErrClosed`) instead of
   attempting to reload it.
+- The `DD_str` byte-handling results were collected with system ANSI code page
+  65001 and the tested HID DLL. Another code page or keyboard layout may map
+  different single bytes, but the DLL still does not decode UTF-8.
 - The direct HID report experiments are reverse-engineering notes, not a
   supported API. Do not depend on them in production code.

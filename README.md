@@ -79,7 +79,11 @@ func main() {
   returns an error for left/right-specific VKs (`VK_LCONTROL`, `VK_RCONTROL`,
   `VK_LSHIFT`, `VK_RSHIFT`); use the `VirtualKey` constants for those.
 - `InputString` uses `DD_str`, which only supports printable ASCII
-  (`0x20-0x7E`). Non-ASCII text needs a Unicode-capable input method.
+  (`0x20-0x7E`). The tested vendor DLL silently drops non-ASCII and control
+  bytes but still returns success, so the wrapper rejects them instead of
+  silently losing text. Use clipboard+`Ctrl+V` or `SendInput` with
+  `KEYEVENTF_UNICODE` for Unicode; see
+  [docs/dd-str-byte-behavior.md](docs/dd-str-byte-behavior.md).
 - `ScrollWheel` follows the official `DD_whl` mapping: `1` is forward/up and
   `2` is backward/down. (`WheelForward`/`WheelUp` and
   `WheelBackward`/`WheelDown` are aliases.)
@@ -102,19 +106,23 @@ file name the official package uses:
 
 - `cmd/ddprobe` — wrapper-level mouse, keyboard, `ToDDCode`, and lifecycle probe.
 - `cmd/dde2e` — GUI integration test that verifies focus and edit-control text.
+- `cmd/ddutf8` — raw `DD_str` byte probe for UTF-8, GBK, control bytes, and NUL.
 - `cmd/hidprobe` — HID collection enumeration, access/share checks, and raw
   report writes.
 
 ```powershell
 go run ./cmd/ddprobe -dll .\ddhid.63340.dll -wait 5s
 go run ./cmd/dde2e -dll .\ddhid.63340.dll
+go run ./cmd/ddutf8 -dll .\ddhid.63340.dll
 go run ./cmd/hidprobe
 ```
 
 Use `dde2e -skip-mouse` for a keyboard-only run.
 
 See [docs/real-device-testing.md](docs/real-device-testing.md) for the test
-matrix, methodology, and observed results, and
+matrix, methodology, and observed results,
+[docs/dd-str-byte-behavior.md](docs/dd-str-byte-behavior.md) for the `DD_str`
+byte-handling experiment, and
 [docs/hid-protocol-notes.md](docs/hid-protocol-notes.md) for the vendor HID
 collection and report observations. `ddprobe` aborts when the cursor is moving;
 run it while the mouse is idle, and do not run multiple device probes at once.
