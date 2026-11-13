@@ -130,15 +130,21 @@ run it while the mouse is idle, and do not run multiple device probes at once.
 ## Driver and DLL notes
 
 The official DD package ships more than one driver/DLL variant, and the files
-must be paired. For example, the current package contains:
+must be paired. The tested 63xxx package keeps them in separate folders:
 
-- a simple-mode DLL such as `dd63330.dll` (older releases use a different file
-  name for the same simple-mode API) with its own driver;
-- a HID-mode DLL such as `ddhid.63340.dll` plus the matching
-  `ddhid63340.sys` driver.
+- `1.simple\dd63330.dll` — simple-mode DLL with its own driver;
+- `2.hid\ddhid.63340.dll` — HID-mode DLL, paired with
+  `2.hid\drv\ddhid63340.sys` (plus the `.inf`, `.cat`, and installer).
 
-Use the DLL and driver from the same package. Do not mix a DLL with a driver
+The two folders are alternatives, not two halves of one installation. Use one
+mode and install only the driver from that mode. Do not mix a DLL with a driver
 from another DD release.
+
+Newer packages may put the variants at the archive root instead of
+`1.simple`/`2.hid`: for example `dd.71000.dll` is the simple-mode DLL and
+`hid.72000.dll` is the HID-mode DLL paired with `hid.drv\ddhid72000.sys`. The
+HID DLL uses the Windows `HidD_*` APIs. File names change between releases, so
+choose the DLL by the driver you have installed, not by the file name alone.
 
 Vendor-side constraints observed while testing the 2026 package on Windows 11:
 

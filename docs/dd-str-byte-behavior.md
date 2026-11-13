@@ -26,6 +26,13 @@ For each case the probe:
 No keyboard layout or IME changes were made. The process ANSI code page was the
 system default.
 
+## Scope
+
+Only the HID DLL could be evaluated. The simple-mode `dd63330.dll` from the same
+package initialized and converted key codes, but injection returned
+`ERROR_GEN_FAILURE (31)` on this machine; only the HID driver was installed. Its
+`DD_str` byte handling is therefore not covered by these results.
+
 ## Results
 
 | Input | Bytes | `DD_str` | Edit text |

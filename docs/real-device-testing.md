@@ -25,8 +25,10 @@ The results in this repository were collected on:
 | Simple-mode DLL | `dd63330.dll`; project copy `dd43390.dll` is byte-identical |
 | Simple-mode DLL SHA-256 | `72FBA9C7721AC394A0803D0C97835B0DA21C9D6DDA8076FC0584A566CD7B2A9D` |
 
-The simple-mode and HID-mode files are different products. Always pair a DLL
-with the driver from the same official package; do not mix releases.
+The simple-mode and HID-mode files are different products. The tested 63xxx
+package keeps them in separate folders: `1.simple\dd63330.dll` and
+`2.hid\ddhid.63340.dll` plus `2.hid\drv\ddhid63340.sys`. Always pair a DLL with
+the driver from the same official package; do not mix releases.
 
 ## Diagnostic tools
 
