@@ -1,0 +1,3 @@
+[identity] dll=ddhid.63340.dll size=2242088 sha256=01e8db6893cf79e9e7aa3afbee76bea6c4220c4d1a2c63bc2e5b7c109fdb831e pinned_sha256=01e8db6893cf79e9e7aa3afbee76bea6c4220c4d1a2c63bc2e5b7c109fdb831e hash_err="" commit=40b1124554adfa501fff6fe0545593200ec77547 loaded=false
+[start] confirm_idle=true timeout=20s attempt=1 retry=false calls=GetDD,Close accepted_side_effect="hid input buffer count" driver_install=false
+[result] timeout=false loaded=true init_ok=true code=1 duration_ms=73 release_ok=true release_ms=8 release_err="" retry=false acceptance="init only"
