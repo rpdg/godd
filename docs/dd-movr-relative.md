@@ -31,22 +31,22 @@ The inventory log repeats them on `[protocol]` lines.
 | Interrupt | Ctrl+C is observed between DLL calls. A call already inside the DLL cannot be cancelled. Killing the process skips cursor restore |
 
 Exit 0 means the plan finished. It does not mean every loop converged. Exit 1
-is an abort. Exit 2 is a refusal before motion (usage, DLL/driver pair, DPI,
-or driver). Exit 130 is Ctrl+C.
+is an abort. Exit 2 is a refusal before motion (usage, a DLL the wrapper
+cannot resolve, DPI, or the driver). Exit 130 is Ctrl+C.
 
 `-run` also requires the process to be in the active console session, an
 amd64 DLL exporting `DD_btn`, `DD_key`, `DD_mov`, `DD_movR`, `DD_whl`, and
-`DD_str`, and a readable version resource whose 4-digit tokens equal the
-driver file-name token. The DriverStore copy must not be ambiguous or differ
-from the running image. After the idle check, SPI speed, thresholds, and
-enhanced pointer precision are read again; a difference aborts before the DLL
-is loaded. `SetCursorPos` is used only to place the cursor at home between
+`DD_str`, and a readable version resource. Those checks let the wrapper
+resolve the DLL. They do not prove that the installed driver accepts it.
+Filename and version numbers are recorded as `token_relation` and do not
+refuse the run. The DriverStore copy must not be ambiguous or differ from
+the running image. After the idle check, SPI speed, thresholds, and enhanced
+pointer precision are read again; a difference aborts before the DLL is
+loaded. `SetCursorPos` is used only to place the cursor at home between
 trials. Loop steps call only `DD_movR`.
 
-A file name that contains the driver token is not enough. `PairOK` also
-requires every 4-digit run in `FileVersion`, `ProductVersion`, and
-`OriginalFilename` to equal that same token. An empty version field is not a
-token. A DLL from another build is not loaded.
+The probe does not install, update, or replace a driver, and it does not
+change pointer speed, enhanced pointer precision, or DPI.
 
 ## Commands
 
@@ -61,16 +61,21 @@ go run ./cmd/ddmovr -log docs/evidence/ddmovr-inventory.log
 
 The log is created with `O_EXCL`. Repeat the inventory into a new path.
 
-Motion requires a DLL whose file name and version tokens equal the running
-driver, and an operator confirmation that the desktop is idle:
+Motion still requires `-run`, `-confirm-idle`, and a DLL the operator has
+accepted. The probe records filename and version numbers. A difference does
+not refuse the run, and a match does not prove the installed driver accepts
+the DLL:
 
 ```powershell
-go run ./cmd/ddmovr -dll <paired-dll> -log docs/evidence/ddmovr-run.log -run -confirm-idle -wait 5s
+go run ./cmd/ddmovr -dll <candidate-dll> -log docs/evidence/ddmovr-run.log -run -confirm-idle -wait 5s
 ```
 
-`-run` without `-confirm-idle` exits 2 before the wait. Do not point `-dll`
-at `dd63330.dll` or at a 32695, 32715, 71000, or 72000 package while
-`ddhid63340.sys` is the running driver.
+`-run` without `-confirm-idle` exits 2 before the wait. The probe no longer
+refuses a DLL because its build number differs from the running driver. That
+is not permission to load it. The one authorized `hid.72000.dll` initialization
+attempt is stopped before execution; see the phased plan. The mouse matrix
+stays stopped. Desktop-idle confirmation remains required before any later
+load.
 
 ## Archive listing
 
@@ -109,23 +114,92 @@ The repository copy `dd63330.dll` was not loaded. Its size is 3860008 and its
 SHA-256 is `72fba9c7721ac394a0803d0c97835b0da21c9d6dda8076fc0584a566cd7b2a9d`.
 `FileVersion`, `ProductVersion`, and `OriginalFilename` are `DD63330`.
 
-### Pairing judgment
+Build numbers above were read from version resources and file names. A shared
+or different number is not a compatibility result. Earlier `63340` and
+`63330` measurements are not evidence for these files.
 
-The running driver base name is `ddhid63340.sys`. Its version strings are
-`ddhid63340`, so the only acceptable DLL token is `63340`.
+## Candidate registration
 
-- `dd.71000.dll`, `hid.72000.dll`, and both `dd32695` DLLs fail because the
-  file-name token and the version token are different builds.
-- `hid.64.dll` and `hid.32.dll` fail because the file name has no 4-digit
-  token. `202x.0.0.8` and `DD HID` also contain no 4-digit token, and neither
-  field contains `63340`. The directory name `dd.hid.32715` is package layout,
-  not a version resource.
-- `DDHID32715.sys` has `OriginalFilename` token `32715`. Its size and SHA-256
-  differ from the running `ddhid63340.sys`.
-- `dd63330.dll` fails because its token is `63330`.
+This record is separate from the 2026-11-12 `MoveRelative(50,50)` result and
+from the simple-mode `ERROR_GEN_FAILURE` result. The current probe is this
+commit: it records filename and version numbers and does not use them as a
+load gate. Parent `5b7c7a84490178b43e413159cb17b7110d159b80` is the earlier
+inventory commit. It is not the current probe.
 
-No member is an original DLL for the running `63340` driver. The motion matrix
-was not started.
+| Role | File | SHA-256 |
+| --- | --- | --- |
+| Candidate DLL | `hid.72000.dll` | `fbc90b106e726f5e5b5e465c6bb2484b7da381a6c3ea4b2d32162b6efdb324cf` |
+| Running driver | `ddhid63340.sys` | `fbe510402b3822c63e94752051b7d5895b67875f22ec48593de19764a649f8b1` |
+| Driver the new package would install | `ddhid72000.sys` | `7f682284952523ace6c2e55462807f4d3e3f30895fc96d297b5e920f38f0cfd5` |
+
+`hid.72000.dll` is the HID DLL in `hid.7xxxx.7z`. It is amd64, 35688 bytes,
+and its version strings are `ddhid72000`. Its export names are `DD_btn`,
+`DD_key`, `DD_mov`, `DD_movR`, `DD_str`, `DD_todc`, and `DD_whl`. The file
+contains `HidD_*` and `SetupDi*` names. It does not contain a `.sys` path, and
+it does not mention `63340`. Those exports mean the wrapper could resolve the
+DLL. They do not prove that the running `ddhid63340` driver accepts it.
+
+The same archive's `ddhid72000.inf` installs service `ddhid72000`, copies
+`ddhid72000.sys`, and uses hardware ID `ddhid72000\HID_DEVICE`. `install.bat`
+runs `ddc.exe`. That program's image contains
+`UpdateDriverForPlugAndPlayDevicesW` beside `newdev.dll`, and the SetupDi
+driver-install names. The running driver is service `ddhid63340`, hardware ID
+`ddhid63340\HID_DEVICE`, and a different hash. The DLL file does not say that
+this installed driver must be replaced. The package's setup path does install
+a different driver. That setup was not run.
+
+`dd.71000.dll` is the other new DLL in the archive. It exports the same names
+and is also amd64, but its image contains `dd71000.sys`, `\\.\dd71000`, and
+`\Device\dd71000`. That names a driver other than `ddhid63340.sys`. The
+archive does not contain `dd71000.sys`. This DLL was not loaded.
+
+No driver, service, or system setting was changed. Neither DLL was loaded.
+The mouse matrix was not started.
+
+## Init review
+
+`hid.72000.dll` was disassembled and was not loaded. Its delay-import
+directory is empty. The import set is HID enumeration and report I/O
+(`HidD_GetHidGuid`, `HidD_GetAttributes`, `HidD_GetPreparsedData`,
+`HidP_GetCaps`, `HidD_FreePreparsedData`, `HidD_SetNumInputBuffers`,
+`SetupDiGetClassDevsW`, `SetupDiEnumDeviceInterfaces`,
+`SetupDiGetDeviceInterfaceDetailW`, `SetupDiDestroyDeviceInfoList`,
+`CreateFileW`, `WriteFile`, `CloseHandle`, `CreateEventW`,
+`WaitForSingleObject`, `GetSystemMetrics`), plus the C runtime. It does not
+import `LoadLibrary`, `GetProcAddress`, a service API, or
+`UpdateDriverForPlugAndPlayDevicesW`. The text section has no `syscall`
+instruction. `DllMain` initializes the security cookie and the C runtime.
+Opening a collection is reached from `DD_btn(0)`.
+
+`DD_btn(0)` allocates a 0x58-byte block, then looks for a collection whose
+attributes are vendor `0x9AC5` and product `0x9B4D`. On a usable handle it
+calls `HidD_SetNumInputBuffers(handle, 10)`. The HID class driver default for
+that queue is 32. The setting is documented as the collection's input-report
+queue (`IOCTL_SET_NUM_DEVICE_INPUT_BUFFERS`). The documentation does not say
+the value returns to 32 when the handle closes. The same path then writes two
+65-byte reports, `40 09 88` and `40 09 89`, and waits up to `0x1444` ms. The
+wrapper returns success only when that path returns 100. What those reports
+change inside the running driver was not measured.
+
+That call is enough to stop. A successful initialization cannot be guaranteed
+to leave the environment unchanged. The installer was not run. One load would
+not be retried, and a later success would still not be compatibility
+acceptance.
+
+## Phased plan
+
+1. **Identity, done.** The candidate hash and the running-driver hash are
+   registered with this probe commit. Parent `5b7c7a8` is the earlier
+   inventory, not this probe version.
+2. **Driver setup, stopped.** Do not run `install.bat`, `ddc.exe`, or the
+   INF. That would install or update `ddhid72000.sys`.
+3. **Load and `DD_btn(0)`, stopped before execution.** One attempt was
+   authorized. Desktop-idle confirmation was still required and was not given.
+   The init review above shows the call can change the HID input-buffer count.
+   The DLL was not loaded. No retry.
+4. **Mouse matrix, not authorized.** Only after a completed stage 3, with
+   another idle confirmation, using the existing `ddmovr -run` limits. One
+   pass, then stop on an anomaly. Not started.
 
 ## Inventory
 
@@ -133,9 +207,9 @@ Public log: [evidence/ddmovr-inventory.log](evidence/ddmovr-inventory.log).
 
 The log records `probe_moved_cursor=false` and `loaded=false`. No `DD_movR`
 call was made. Pointer speed, enhanced pointer precision, DPI, and the driver
-service were read and not written. The log's git line names the parent commit
-and the pre-commit status; this file's own commit is the citation point for
-winput. Probe-file hashes are the `[source]` lines.
+service were read and not written. The log's git line and `[source]` hashes
+belong to parent `5b7c7a8`. They are not the current probe. This commit is
+the current probe.
 
 ### Observed
 
@@ -156,8 +230,9 @@ Rectangle fields in the log are `left,top,right,bottom`.
 
 ### Inference
 
-- The class `DriverVersion` `8.8.8.8` is not the product token. Pairing uses
-  `63340`.
+- The class `DriverVersion` `8.8.8.8` is not the product token. The running
+  driver's file-name token is `63340`. A shared or different number is recorded
+  and is not a compatibility result.
 - With both monitors at the system DPI, the placement rule selects the larger
   safe interior. Whether a later ±200 count still reaches the clamp edge
   depends on measured gain. This inventory did not measure gain.
@@ -169,8 +244,8 @@ Rectangle fields in the log are `left,top,right,bottom`.
 
 - Signs, magnitudes, call intervals, units, acceleration, overshoot, and
   multi-step convergence of `DD_movR`. No motion log exists.
-- A DLL whose file name and version tokens are `63340` was not found in either
-  archive, so none was loaded.
+- No member of either archive has file-name or version token `63340`. The
+  candidate `hid.72000.dll` was still not loaded. See the registration above.
 - Buttons, wheel, keyboard, and `DD_str` were not repeated.
 - The winput human trajectory was not run. The probe records
   `winput_human_band_abs_lt_3` only as a comparison field. It is not the pass

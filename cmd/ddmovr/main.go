@@ -11,10 +11,10 @@
 //
 //	go run ./cmd/ddmovr -log docs/evidence/ddmovr-inventory.log
 //
-// Motion requires a DLL whose version token matches the running driver, and an
-// operator who has confirmed that the desktop is idle:
+// Motion requires -run, -confirm-idle, and a DLL the operator has accepted.
+// A matching build number is recorded and is not a compatibility proof:
 //
-//	go run ./cmd/ddmovr -dll C:\abs\ddhid.63340.dll -log docs\evidence\ddmovr-run.log -run -confirm-idle -wait 5s
+//	go run ./cmd/ddmovr -dll <candidate-dll> -log docs/evidence/ddmovr-run.log -run -confirm-idle -wait 5s
 package main
 
 import (
@@ -280,13 +280,13 @@ func logDriver(lg *lineLog, d DriverFacts) {
 }
 
 type dllInspect struct {
-	Abs        string
-	PE         PEInfo
-	PEErr      string
-	VersionErr string
-	PairOK     bool
-	PairWhy    string
-	Err        string
+	Abs         string
+	PE          PEInfo
+	PEErr       string
+	VersionErr  string
+	TokenRel    TokenRelation
+	TokenDetail string
+	Err         string
 }
 
 func inspectDLL(lg *lineLog, path, driverBase string) dllInspect {
@@ -315,12 +315,15 @@ func inspectDLL(lg *lineLog, path, driverBase string) dllInspect {
 		out.VersionErr = verErr.Error()
 	}
 	id := DLLIdentity{Base: filepath.Base(abs), FileVersion: fv, ProductVersion: pv, OriginalFilename: orig}
-	out.PairOK, out.PairWhy = PairOK(driverBase, id)
+	out.TokenRel, out.TokenDetail = RelateTokens(driverBase, id)
 	lg.Line("dll",
 		kv("name", baseName(abs)), kv("size", st.Size()), kv("sha256", sum), kv("hash_err", errText(sumErr)),
 		kv("machine", pe.MachineName()), kv("exports", strings.Join(pe.Exports, ",")), kv("pe_err", out.PEErr),
 		kv("file_version", fv), kv("product_version", pv), kv("original_filename", orig), kv("version_err", out.VersionErr),
-		kv("driver_base", driverBase), kv("pair_ok", out.PairOK), kv("pair_reason", out.PairWhy), kv("loaded", false),
+		kv("driver_base", baseName(driverBase)), kv("token_relation", out.TokenRel), kv("token_detail", out.TokenDetail),
+		kv("token_blocks_load", TokenRelationBlocksLoad(out.TokenRel)),
+		kv("token_proves_driver", TokenSameProvesDriver(out.TokenRel)),
+		kv("loaded", false),
 	)
 	if sumErr != nil && out.Err == "" {
 		out.Err = sumErr.Error()
@@ -364,11 +367,8 @@ func motionRefused(s systemFacts, drv DriverFacts, selectWhy string, dll dllInsp
 	if dll.VersionErr != "" {
 		return "dll version resource unreadable"
 	}
-	if !dll.PairOK {
-		if dll.PairWhy == "" {
-			return "dll/driver token mismatch"
-		}
-		return dll.PairWhy
+	if TokenRelationBlocksLoad(dll.TokenRel) {
+		return "token relation blocked"
 	}
 	if s.Pointer.SPIErr != "" {
 		return "spi unreadable before motion"

@@ -223,33 +223,50 @@ func TestRatiosSignAndAbortClass(t *testing.T) {
 	}
 }
 
-func TestPairAndWrapperRet(t *testing.T) {
-	ok, why := PairOK("ddhid63340.sys", DLLIdentity{
+func TestTokenRelationIsRecordedNotGated(t *testing.T) {
+	rel, detail := RelateTokens("ddhid63340.sys", DLLIdentity{
 		Base: "ddhid.63340.dll", FileVersion: "ddhid63340",
 		ProductVersion: "ddhid63340", OriginalFilename: "ddhid.63340.dll",
 	})
-	if !ok || why != "" {
-		t.Fatalf("matching pair ok=%v why=%s", ok, why)
+	if rel != TokenSame || detail != "63340" {
+		t.Fatalf("same tokens: %s %s", rel, detail)
 	}
-	if ok, _ := PairOK("ddhid63340.sys", DLLIdentity{Base: "dd63330.dll", FileVersion: "DD63330"}); ok {
-		t.Fatal("simple-mode DLL matched the HID driver")
+	rel, detail = RelateTokens("ddhid63340.sys", DLLIdentity{Base: "dd63330.dll", FileVersion: "DD63330"})
+	if rel != TokenDifferent || detail != "filename token 63330" {
+		t.Fatalf("63330: %s %s", rel, detail)
 	}
-	if ok, _ := PairOK("ddhid63340.sys", DLLIdentity{Base: "hid.72000.dll", FileVersion: "hid.72000"}); ok {
-		t.Fatal("72000 DLL matched the 63340 driver")
+	rel, detail = RelateTokens("ddhid63340.sys", DLLIdentity{Base: "hid.72000.dll", FileVersion: "ddhid72000", ProductVersion: "ddhid72000", OriginalFilename: "ddhid72000"})
+	if rel != TokenDifferent || detail != "filename token 72000" {
+		t.Fatalf("72000: %s %s", rel, detail)
 	}
-	if ok, _ := PairOK("ddhid72000.sys", DLLIdentity{Base: "hid.72000.dll"}); !ok {
-		t.Fatal("72000 pair should match on filename tokens")
+	rel, detail = RelateTokens("ddhid72000.sys", DLLIdentity{Base: "hid.72000.dll", FileVersion: "ddhid72000"})
+	if rel != TokenSame || detail != "72000" {
+		t.Fatalf("72000 record: %s %s", rel, detail)
 	}
-	renamed := DLLIdentity{Base: "ddhid.63340.dll", OriginalFilename: "dd.71000.dll"}
-	if ok, _ := PairOK("ddhid63340.sys", renamed); ok {
-		t.Fatal("renamed file hid a different original filename")
+	rel, _ = RelateTokens("ddhid63340.sys", DLLIdentity{Base: "ddhid.63340.dll", OriginalFilename: "dd.71000.dll"})
+	if rel != TokenDifferent {
+		t.Fatalf("renamed original filename: %s", rel)
+	}
+	rel, detail = RelateTokens("ddhid63340.sys", DLLIdentity{Base: "hid.64.dll", FileVersion: "202x.0.0.8", OriginalFilename: "DD HID"})
+	if rel != TokenIncomplete || detail != "dll token absent" {
+		t.Fatalf("no token: %s %s", rel, detail)
 	}
 	base := filepathBaseOnly(`D:\pkg\72000\ddhid.63340.dll`)
 	if base != "ddhid.63340.dll" {
 		t.Fatalf("base = %s", base)
 	}
-	if ok, why := PairOK("ddhid63340.sys", DLLIdentity{Base: base}); !ok {
-		t.Fatal(why)
+	for _, dll := range []DLLIdentity{
+		{Base: "hid.72000.dll", FileVersion: "ddhid72000"},
+		{Base: "ddhid.63340.dll", FileVersion: "ddhid63340"},
+		{Base: "hid.64.dll", FileVersion: "202x.0.0.8"},
+	} {
+		rel, _ := RelateTokens("ddhid63340.sys", dll)
+		if TokenRelationBlocksLoad(rel) {
+			t.Fatalf("%s blocked a load", rel)
+		}
+		if TokenSameProvesDriver(rel) {
+			t.Fatalf("%s was treated as driver compatibility", rel)
+		}
 	}
 	code, ok := WrapperRet(nil)
 	if code != 1 || !ok {
@@ -287,6 +304,8 @@ func TestProtocolIsFixedBeforeMotion(t *testing.T) {
 		"control_settle=250ms",
 		"idle=5x100ms",
 		"pointer_guard=SPI speed and enhancement",
+		"a match does not prove driver compatibility",
+		"matching exports do not prove",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("protocol missing %q", want)

@@ -449,37 +449,57 @@ type DLLIdentity struct {
 	OriginalFilename string
 }
 
-// PairOK reports whether every version token on the DLL equals the token in
-// the driver base name. A missing DLL token, or any disagreeing token, fails.
-// Empty version fields are not tokens and do not prove a match by themselves.
-func PairOK(driverBase string, dll DLLIdentity) (bool, string) {
+// TokenRelation is a comparison of 4-digit runs. It is not a compatibility verdict.
+type TokenRelation string
+
+const (
+	TokenSame       TokenRelation = "same"
+	TokenDifferent  TokenRelation = "different"
+	TokenIncomplete TokenRelation = "incomplete"
+)
+
+// RelateTokens compares the driver file-name token with tokens in the DLL
+// file name and version strings. Empty fields add no token. The result is
+// only a record: TokenSame does not prove the installed driver accepts the
+// DLL, and TokenDifferent does not by itself refuse a load.
+func RelateTokens(driverBase string, dll DLLIdentity) (TokenRelation, string) {
 	driver := DigitRuns(driverBase)
 	if len(driver) != 1 {
-		return false, "driver token missing or ambiguous"
+		return TokenIncomplete, "driver token missing or ambiguous"
 	}
-	name := DigitRuns(dll.Base)
-	if len(name) != 1 {
-		return false, "dll filename token missing or ambiguous"
-	}
-	if name[0] != driver[0] {
-		return false, "filename token mismatch"
-	}
-	for _, field := range []struct {
-		name, value string
-	}{
+	want := driver[0]
+	fields := []struct{ name, value string }{
+		{"filename", dll.Base},
 		{"FileVersion", dll.FileVersion},
 		{"ProductVersion", dll.ProductVersion},
 		{"OriginalFilename", dll.OriginalFilename},
-	} {
+	}
+	saw := false
+	for _, field := range fields {
 		runs := DigitRuns(field.value)
+		if field.name == "filename" && len(runs) > 1 {
+			return TokenIncomplete, "dll filename token ambiguous"
+		}
 		for _, run := range runs {
-			if run != driver[0] {
-				return false, field.name + " token mismatch"
+			saw = true
+			if run != want {
+				return TokenDifferent, field.name + " token " + run
 			}
 		}
 	}
-	return true, ""
+	if !saw {
+		return TokenIncomplete, "dll token absent"
+	}
+	return TokenSame, want
 }
+
+// TokenRelationBlocksLoad is false for every relation. A shared or different
+// build number is not a load gate.
+func TokenRelationBlocksLoad(TokenRelation) bool { return false }
+
+// TokenSameProvesDriver is false for every relation. Matching exports or
+// matching build numbers do not prove the installed driver accepts the DLL.
+func TokenSameProvesDriver(TokenRelation) bool { return false }
 
 // WrapperRet maps a godd.MoveRelative error to the DLL code the wrapper
 // accepted. A nil error is code 1, because that is the only success value
@@ -591,7 +611,8 @@ func ProtocolLines() []string {
 		"environment=no pointer, DPI, driver, or package change; this process may call SetProcessDPIAware",
 		"reposition=SetCursorPos returns to home between trials; closed-loop steps call only DD_movR",
 		"wrapper_ret=MoveRelative nil is logged as ret 1; other codes are parsed from the wrapper error",
-		"pair=DLL filename and version tokens must equal the installed driver token; other DLLs are not loaded",
+		"tokens=filename and version numbers are recorded; a difference does not refuse the run, and a match does not prove driver compatibility",
+		"exports=the godd export set is checked so the wrapper can resolve them; matching exports do not prove the installed driver accepts the DLL",
 		"pointer_guard=SPI speed and enhancement are compared again after the idle check; a difference aborts before motion",
 	}
 }
