@@ -17,7 +17,8 @@ The inventory log repeats them on `[protocol]` lines.
 | Limit | Value |
 | --- | --- |
 | Converged | Absolute error ≤ 1 px on both axes, within 12 steps and 3 s, every sample inside the safe rectangle, wrapper return 1 |
-| Unit sample | Wrapper return 1, sample stays in the safe rectangle, the 0 ms and 80 ms positions differ by at most 1 px per axis, cross-axis movement ≤ 1 px |
+| Unit sample | Wrapper return 1, sample stays in the safe rectangle, the 20 ms and 80 ms positions differ by at most 1 px per axis, cross-axis movement ≤ 1 px. `settled` is this comparison |
+| Immediate | The 0 ms and 80 ms positions differ by at most 1 px per axis. A 0 ms sample still at the start does not by itself make `settled` false |
 | Step cap | 40 px. This forces multiple steps on a long target. It is not a winput motion |
 | Samples | 0, 20, and 80 ms after a single call. Bursts also sample about 50 ms and 150 ms after the last call |
 | Bursts | `(+20,0)` five times at gaps 0, 8 ms, and 30 ms, then `(-15,+15)` five times at 8 ms |
@@ -293,3 +294,70 @@ Rectangle fields in the log are `left,top,right,bottom`.
 - The winput human trajectory was not run. The probe records
   `winput_human_band_abs_lt_3` only as a comparison field. It is not the pass
   rule, and this document does not accept a winput change.
+
+## Round one correction
+
+The raw log [evidence/ddmovr-run.log](evidence/ddmovr-run.log) stays as
+recorded. Its git line is `d3d057abc6e4c02ead1eb9c946758fced50ace4d`. The log
+commit is `aa1c66aaf92084834bc690804d5822fd46b15d6d`. This section does not
+rewrite that file.
+
+The operating-system exit code was not obtained. `Start-Process -NoNewWindow`
+left `ExitCode` empty. The probe's own return for `[done] exit=diverged` is 1,
+from the `exitAbort` path in `cmd/ddmovr`. Those are separate facts.
+
+`SignConflict` treated any pure-axis observation below -1 px as a conflict.
+The four ±10 samples at 80 ms were `10,0`, `-10,0`, `0,10`, and `0,-10`, each
+with return 1. The negative samples met the old predicate, and the run stopped
+at `stage=axis10` before gain, the later shots, the bursts, and the loops.
+`classify` calls `SameDirection`, which already uses the request through the
+dot product and stops one call only past `AnomalySlackPx`. That call was not
+changed. The ladder call in `early` remains the only `SignConflict` caller.
+After this correction it compares each requested axis with that request's
+sign. Movement on a zero-request axis is not a sign conflict. One pixel
+against the request stays inside the boundary; two pixels is a conflict.
+
+`settled` compared 0 ms with 80 ms. On the ±10 samples the cursor was still
+at the start at 0 ms and had completed the request by 20 ms, so `settled` was
+false while the 20 ms and 80 ms positions agreed. `SettleAgreePx` remains 1.
+`settled` is now the 20 ms and 80 ms comparison. `immediate` is the 0 ms and
+80 ms comparison and is logged separately. A late 0 ms sample does not by
+itself make `settled` false. The unit-sample ratio still requires `settled`,
+a safe sample, return 1, and cross-axis movement of at most 1 px.
+
+## Next matrix round
+
+This commit does not run the matrix. The previous desktop-idle confirmation
+applied only to the round already logged. The next round waits for a new
+explicit confirmation.
+
+The run uses the probe in this commit. The DLL remains `ddhid.63340.dll`,
+SHA-256 `01e8db6893cf79e9e7aa3afbee76bea6c4220c4d1a2c63bc2e5b7c109fdb831e`.
+The driver check remains SHA-256
+`fbe510402b3822c63e94752051b7d5895b67875f22ec48593de19764a649f8b1`. A compile
+failure or a hash mismatch before the process starts stops the round. The
+process still calls `GetDD` once. The accepted side effect remains the HID
+input-buffer count. No driver install and no pointer, DPI, or service change.
+
+The matrix, admission, 1 px tolerance, 12 steps, 3 s trial limit, and 16 ms
+loop interval stay as already fixed. The 40 px cap still applies only inside
+`StepRequest`. Single shots and bursts use the listed request sizes. The new
+log path is `docs/evidence/ddmovr-run-2.log`, created with `O_EXCL`, so
+`docs/evidence/ddmovr-run.log` is not overwritten. One round, no retry. The
+outer limit is 90 s and kills only that process.
+
+The process is started without a shared console. After it leaves, the
+recorded operating-system exit code is `Process.ExitCode`. If that value is
+absent, the record says it was not obtained. The probe token in `[done]` is
+written separately and is not copied into the operating-system field.
+
+```powershell
+go build -o $env:TEMP\ddmovr-matrix.exe ./cmd/ddmovr
+& $env:TEMP\ddmovr-matrix.exe -dll <absolute path of the pinned DLL> -log docs/evidence/ddmovr-run-2.log -run -confirm-idle -wait 5s
+```
+
+A normal return tries to restore the cursor captured at the start of motion
+and records the result. Ctrl+C is observed between DLL calls. A call already
+inside the DLL cannot be cancelled. A 90 s kill skips that restore. Exit 0
+means the plan finished. It does not mean every loop converged, and it does
+not accept the winput trajectory. Items that do not run stay untested.

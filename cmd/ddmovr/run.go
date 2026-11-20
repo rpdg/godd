@@ -137,6 +137,8 @@ func (r *runner) early() {
 		r.stop = ExitNoDisplacement
 		return
 	}
+	// This is the only SignConflict call. classify uses SameDirection, which
+	// already compares the dot product and stops one call only past AnomalySlackPx.
 	if SignConflict(ten) {
 		r.log.Line("result", kv("stage", "axis10"), kv("exit", ExitDiverged))
 		r.stop = ExitDiverged
@@ -213,19 +215,19 @@ func (r *runner) single(m Move) (AxisObs, bool) {
 	returned := time.Now()
 	at0, err0 := cursorPos()
 	if !r.sleepUntil(returned.Add(Sample20)) {
-		r.logShot(m, ret, callErr, dt, before, at0, at0, at0, false, r.stop)
+		r.logShot(m, ret, callErr, dt, before, at0, at0, at0, false, false, r.stop)
 		return AxisObs{}, false
 	}
 	at20, err20 := cursorPos()
 	if !r.sleepUntil(returned.Add(Sample80)) {
-		r.logShot(m, ret, callErr, dt, before, at0, at20, at20, false, r.stop)
+		r.logShot(m, ret, callErr, dt, before, at0, at20, at20, false, false, r.stop)
 		return AxisObs{}, false
 	}
 	at80, err80 := cursorPos()
 	readErr := firstErr(err0, err20, err80)
 	if readErr != nil {
 		r.stop = ExitControl
-		r.logShot(m, ret, callErr, dt, before, at0, at20, at80, false, ExitControl)
+		r.logShot(m, ret, callErr, dt, before, at0, at20, at80, false, false, ExitControl)
 		return AxisObs{}, false
 	}
 	reason := ""
@@ -236,8 +238,8 @@ func (r *runner) single(m Move) (AxisObs, bool) {
 	} else {
 		reason = r.classify(m.DX, m.DY, before, at80)
 	}
-	settled := abs(at0.X-at80.X) <= SettleAgreePx && abs(at0.Y-at80.Y) <= SettleAgreePx
-	r.logShot(m, ret, callErr, dt, before, at0, at20, at80, settled, reason)
+	immediate, settled := ShotStability(at0, at20, at80)
+	r.logShot(m, ret, callErr, dt, before, at0, at20, at80, immediate, settled, reason)
 	obs := AxisObs{
 		ReqX: m.DX, ReqY: m.DY,
 		ObsX: at80.X - before.X, ObsY: at80.Y - before.Y,
@@ -253,7 +255,7 @@ func (r *runner) single(m Move) (AxisObs, bool) {
 	return obs, true
 }
 
-func (r *runner) logShot(m Move, ret int32, callErr error, dt time.Duration, before, at0, at20, at80 Point, settled bool, reason string) {
+func (r *runner) logShot(m Move, ret int32, callErr error, dt time.Duration, before, at0, at20, at80 Point, immediate, settled bool, reason string) {
 	r.shots++
 	r.log.Line("shot",
 		kv("trial", m.Name),
@@ -269,6 +271,7 @@ func (r *runner) logShot(m Move, ret int32, callErr error, dt time.Duration, bef
 		kv("d20", coord(Point{at20.X - before.X, at20.Y - before.Y})),
 		kv("d80", coord(Point{at80.X - before.X, at80.Y - before.Y})),
 		kv("call_us", dt.Microseconds()),
+		kv("immediate", immediate),
 		kv("settled", settled),
 		kv("exit", reason),
 	)

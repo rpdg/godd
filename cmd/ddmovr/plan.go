@@ -416,18 +416,42 @@ func MaxInteriorRatio(samples []AxisObs) (float64, int) {
 
 func NoMotion(obsX, obsY int) bool { return obsX == 0 && obsY == 0 }
 
-// SignConflict is true when an interior sample moved against its axis request
-// by more than one pixel. The ladder stops before a larger step walks away.
+// SignConflict is true when a sample moved against a requested axis by more
+// than CrosstalkLimitPx. The comparison uses that axis request's sign. A zero
+// request has no direction, so movement on that axis is not a sign conflict.
+// The ±10 ladder is the only caller.
 func SignConflict(samples []AxisObs) bool {
 	for _, o := range samples {
-		if o.ReqX != 0 && o.ReqY == 0 && o.ObsX < -CrosstalkLimitPx {
-			return true
-		}
-		if o.ReqY != 0 && o.ReqX == 0 && o.ObsY < -CrosstalkLimitPx {
+		if againstAxis(o.ReqX, o.ObsX) || againstAxis(o.ReqY, o.ObsY) {
 			return true
 		}
 	}
 	return false
+}
+
+// againstAxis reports observation opposite a nonzero request by more than
+// CrosstalkLimitPx. Equality with the limit stays inside the boundary.
+func againstAxis(req, obs int) bool {
+	if req == 0 {
+		return false
+	}
+	if req > 0 {
+		return obs < -CrosstalkLimitPx
+	}
+	return obs > CrosstalkLimitPx
+}
+
+// ShotStability separates an immediate landing from a later stable landing.
+// Both comparisons use SettleAgreePx. A cursor that is still at the start at
+// 0 ms, then holds the same position from 20 ms to 80 ms, is settled.
+func ShotStability(at0, at20, at80 Point) (immediate, settled bool) {
+	immediate = withinPx(at0, at80, SettleAgreePx)
+	settled = withinPx(at20, at80, SettleAgreePx)
+	return immediate, settled
+}
+
+func withinPx(a, b Point, tol int) bool {
+	return abs(a.X-b.X) <= tol && abs(a.Y-b.Y) <= tol
 }
 
 var digitRun = regexp.MustCompile(`\d{4,}`)
@@ -598,11 +622,12 @@ func ProtocolLines() []string {
 		"burst_gaps_ms=0,8,30",
 		"burst_count=" + strconv.Itoa(BurstCount),
 		"pass_converged=abs error <= tolerance on both axes, within max_steps and trial_timeout, every sample inside the safe rect, wrapper ret 1",
-		"pass_unit_sample=wrapper ret 1, sample stayed in the safe rect, sample at 0ms and 80ms differ by at most 1px per axis, crosstalk <= 1px",
+		"pass_unit_sample=wrapper ret 1, sample stayed in the safe rect, 20ms and 80ms differ by at most 1px per axis, crosstalk <= 1px",
+		"immediate=0ms and 80ms differ by at most 1px per axis; a 0ms sample still at the start does not by itself make settled false",
 		"run_abort=api-error edge left-monitor diverged anomaly-delta contaminated no-displacement interrupted edge-risk control-failed",
 		"not_run_abort=converged max-steps timeout skipped-clearance",
 		"exit_priority=converged,timeout,max-steps",
-		"sign_stop=after +/-10, against-axis motion beyond 1px stops the run; one call aborts immediately only when inversion exceeds anomaly_slack_px",
+		"sign_stop=after +/-10, motion against the requested axis by more than 1px stops the run; positive and negative requests both count; a zero request axis does not; one call aborts immediately only when inversion exceeds anomaly_slack_px",
 		"reposition_settle=" + RepositionSettle.String(),
 		"control_settle=" + ControlSettle.String(),
 		"idle=" + strconv.Itoa(IdleSamples) + "x" + IdleGap.String(),

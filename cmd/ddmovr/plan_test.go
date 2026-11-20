@@ -223,6 +223,96 @@ func TestRatiosSignAndAbortClass(t *testing.T) {
 	}
 }
 
+func TestSignConflictUsesRequestSign(t *testing.T) {
+	limit := CrosstalkLimitPx
+	aligned := []AxisObs{
+		{ReqX: 10, ObsX: 10, ObsY: 0},
+		{ReqX: -10, ObsX: -10, ObsY: 0},
+		{ReqY: 10, ObsY: 10},
+		{ReqY: -10, ObsY: -10},
+	}
+	if SignConflict(aligned) {
+		t.Fatal("round-one ±10 observations follow their requests")
+	}
+	cases := []struct {
+		name string
+		obs  AxisObs
+		want bool
+	}{
+		{"+x beyond", AxisObs{ReqX: 10, ObsX: -limit - 1}, true},
+		{"+x boundary", AxisObs{ReqX: 10, ObsX: -limit}, false},
+		{"+x along", AxisObs{ReqX: 10, ObsX: 40}, false},
+		{"-x beyond", AxisObs{ReqX: -10, ObsX: limit + 1}, true},
+		{"-x boundary", AxisObs{ReqX: -10, ObsX: limit}, false},
+		{"-x along", AxisObs{ReqX: -10, ObsX: -40}, false},
+		{"+y beyond", AxisObs{ReqY: 10, ObsY: -limit - 1}, true},
+		{"+y boundary", AxisObs{ReqY: 10, ObsY: -limit}, false},
+		{"-y beyond", AxisObs{ReqY: -10, ObsY: limit + 1}, true},
+		{"-y boundary", AxisObs{ReqY: -10, ObsY: limit}, false},
+		{"-y along", AxisObs{ReqY: -10, ObsY: -10}, false},
+		{"zero request", AxisObs{ObsX: -5, ObsY: 5}, false},
+		{"zero-request axis", AxisObs{ReqX: 10, ObsX: 10, ObsY: -5}, false},
+		{"zero-request x", AxisObs{ReqY: -10, ObsX: 5, ObsY: -10}, false},
+		{"diagonal x against", AxisObs{ReqX: 10, ReqY: 10, ObsX: -limit - 1, ObsY: 10}, true},
+		{"diagonal y against", AxisObs{ReqX: -10, ReqY: -10, ObsX: -10, ObsY: limit + 1}, true},
+		{"diagonal with request", AxisObs{ReqX: -10, ReqY: 10, ObsX: -10, ObsY: 10}, false},
+	}
+	for _, tc := range cases {
+		if got := SignConflict([]AxisObs{tc.obs}); got != tc.want {
+			t.Errorf("%s: got %v", tc.name, got)
+		}
+	}
+}
+
+func TestShotStabilityKeepsOnePixel(t *testing.T) {
+	origin := Point{X: -960, Y: 540}
+	plus10 := Point{X: -950, Y: 540}
+	immediate, settled := ShotStability(origin, plus10, plus10)
+	if immediate || !settled {
+		t.Fatalf("late but held: immediate=%v settled=%v", immediate, settled)
+	}
+	one := Point{X: -959, Y: 540}
+	immediate, settled = ShotStability(origin, one, one)
+	if !immediate || !settled {
+		t.Fatalf("1px from the start: immediate=%v settled=%v", immediate, settled)
+	}
+	held := Point{X: -960, Y: 541}
+	immediate, settled = ShotStability(held, held, held)
+	if !immediate || !settled {
+		t.Fatalf("already there: immediate=%v settled=%v", immediate, settled)
+	}
+	lateY := Point{X: -960, Y: 530}
+	immediate, settled = ShotStability(origin, lateY, lateY)
+	if immediate || !settled {
+		t.Fatalf("late y: immediate=%v settled=%v", immediate, settled)
+	}
+	boundary := Point{X: plus10.X + SettleAgreePx, Y: plus10.Y}
+	_, settled = ShotStability(origin, boundary, plus10)
+	if !settled {
+		t.Fatal("20ms and 80ms may differ by the tolerance")
+	}
+	beyond := Point{X: plus10.X + SettleAgreePx + 1, Y: plus10.Y}
+	_, settled = ShotStability(origin, beyond, plus10)
+	if settled {
+		t.Fatal("one pixel past the tolerance is not settled")
+	}
+	beyondY := Point{X: plus10.X, Y: plus10.Y + SettleAgreePx + 1}
+	_, settled = ShotStability(origin, beyondY, plus10)
+	if settled {
+		t.Fatal("y past the tolerance is not settled")
+	}
+	atLimit := Point{X: origin.X + SettleAgreePx, Y: origin.Y}
+	immediate, _ = ShotStability(origin, plus10, atLimit)
+	if !immediate {
+		t.Fatal("0ms and 80ms at the tolerance are immediate")
+	}
+	pastLimit := Point{X: origin.X + SettleAgreePx + 1, Y: origin.Y}
+	immediate, _ = ShotStability(origin, plus10, pastLimit)
+	if immediate {
+		t.Fatal("0ms and 80ms past the tolerance are not immediate")
+	}
+}
+
 func TestTokenRelationIsRecordedNotGated(t *testing.T) {
 	rel, detail := RelateTokens("ddhid63340.sys", DLLIdentity{
 		Base: "ddhid.63340.dll", FileVersion: "ddhid63340",
@@ -306,6 +396,9 @@ func TestProtocolIsFixedBeforeMotion(t *testing.T) {
 		"pointer_guard=SPI speed and enhancement",
 		"a match does not prove driver compatibility",
 		"matching exports do not prove",
+		"20ms and 80ms differ by at most 1px",
+		"positive and negative requests both count",
+		"a zero request axis does not",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("protocol missing %q", want)
