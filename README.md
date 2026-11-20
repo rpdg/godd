@@ -105,6 +105,9 @@ public API. They take the vendor DLL path explicitly, so they work with whatever
 file name the official package uses:
 
 - `cmd/ddprobe` — wrapper-level mouse, keyboard, `ToDDCode`, and lifecycle probe.
+- `cmd/ddmovr` — `DD_movR` sign, interval, and capped closed-loop probe. The
+  default inventory does not load a DLL or move the cursor. `-run` moves the
+  cursor and requires `-confirm-idle`.
 - `cmd/dde2e` — GUI integration test that verifies focus and edit-control text.
 - `cmd/ddutf8` — raw `DD_str` byte probe for UTF-8, GBK, control bytes, and NUL.
 - `cmd/hidprobe` — HID collection enumeration, access/share checks, and raw
@@ -121,6 +124,8 @@ Use `dde2e -skip-mouse` for a keyboard-only run.
 
 See [docs/real-device-testing.md](docs/real-device-testing.md) for the test
 matrix, methodology, and observed results,
+[docs/dd-movr-relative.md](docs/dd-movr-relative.md) for the `DD_movR`
+relative-move probe and its pass limits,
 [docs/dd-str-byte-behavior.md](docs/dd-str-byte-behavior.md) for the `DD_str`
 byte-handling experiment, and
 [docs/hid-protocol-notes.md](docs/hid-protocol-notes.md) for the vendor HID

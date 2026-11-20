@@ -39,6 +39,7 @@ the repository documentation or tests.
 | Tool | Purpose |
 | --- | --- |
 | `cmd/ddprobe` | Minimal wrapper-level probe: cursor control, relative/absolute move, buttons, wheel, key injection, `ToDDCode`, `Close`, and terminal singleton behavior. |
+| `cmd/ddmovr` | `DD_movR` sign, magnitude, call-interval, and capped closed-loop probe. Inventory does not move the cursor. See [dd-movr-relative.md](dd-movr-relative.md). |
 | `cmd/dde2e` | GUI integration test: creates a window and edit control, moves/clicks with DD, then verifies focus and text produced by `DD_str`, `PressHotkey`, `PressKey`, and `ToDDCode`. |
 | `cmd/ddutf8` | Calls the vendor `DD_str` export with raw byte sequences and reads the edit text back, documenting ASCII, UTF-8, GBK, control-byte, and NUL handling. |
 | `cmd/hidprobe` | Low-level HID inspection without loading the vendor DLL: enumerate collections, query caps, test access/share modes, and write raw vendor reports. |
@@ -186,6 +187,13 @@ The clean mouse retest on 2026-11-12 passed: `SetCursorPos(300,300)` landed at
 `(300,300)`, `MoveTo(600,400)` landed at `(600,400)`, `MoveRelative(50,50)`
 produced exactly `(50,50)`, and `DD_btn` changed `VK_LBUTTON` state. The full
 `dde2e` run also moved the cursor to the edit control and clicked it into focus.
+
+That `MoveRelative(50,50)` row is one sample on the Windows 11 setup in the
+table above. It does not measure sign, magnitude, call interval, acceleration,
+overshoot, or multi-step convergence. Those gaps belong to `cmd/ddmovr`.
+The 2026-11-20 inventory of that probe did not load a DLL and did not move the
+cursor; see [dd-movr-relative.md](dd-movr-relative.md). It does not replace this
+row, and this row does not replace it.
 
 An earlier run reported "DLL returns success but the cursor did not move". That
 result was not reproducible in a clean environment. The earlier run had a stale
