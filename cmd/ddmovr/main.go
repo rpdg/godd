@@ -55,7 +55,13 @@ func realMain(args []string) int {
 	confirmFlag := fs.Bool("confirm-idle", false, "operator confirms the desktop is idle")
 	waitFlag := fs.Duration("wait", 5*time.Second, "pause after the pre-motion checks, before the idle samples")
 	logFlag := fs.String("log", "", "exclusive evidence log; required with -run")
+	partFlag := fs.String("part", PartMatrix, "matrix runs the full ladder; small runs bursts and loops only")
 	if err := fs.Parse(args); err != nil {
+		return exitRefuse
+	}
+	part, partOK := ParsePart(*partFlag)
+	if !partOK {
+		fmt.Fprintln(os.Stderr, "ddmovr: -part must be matrix or small")
 		return exitRefuse
 	}
 	if fs.NArg() != 0 {
@@ -78,6 +84,11 @@ func realMain(args []string) int {
 	defer stop()
 
 	logProtocol(lg)
+	if part == PartSmall {
+		for _, line := range SmallPartLines() {
+			lg.Line("protocol", kv("item", line))
+		}
+	}
 	root, err := moduleRoot()
 	if err != nil {
 		lg.Line("git", kv("err", err.Error()))
@@ -86,7 +97,7 @@ func realMain(args []string) int {
 		logSources(lg, root)
 		logSiblings(lg, root, absPath(*dllFlag))
 	}
-	lg.Line("env", kv("godd_dll_set", os.Getenv("GODD_DLL") != ""), kv("dll_name", baseName(*dllFlag)), kv("run", *runFlag), kv("confirm_idle", *confirmFlag))
+	lg.Line("env", kv("godd_dll_set", os.Getenv("GODD_DLL") != ""), kv("dll_name", baseName(*dllFlag)), kv("run", *runFlag), kv("part", part), kv("confirm_idle", *confirmFlag))
 
 	facts := collectSystem()
 	logFacts(lg, facts)
@@ -119,6 +130,10 @@ func realMain(args []string) int {
 	}
 	if !*confirmFlag {
 		lg.Line("refuse", kv("exit", exitRefuse), kv("reason", "-run requires -confirm-idle"), kv("probe_moved_cursor", false), kv("loaded", false))
+		return exitRefuse
+	}
+	if part == PartSmall && !SmallRequestsWithinCap() {
+		lg.Line("refuse", kv("exit", exitRefuse), kv("reason", "small part request exceeds max_step_px"), kv("probe_moved_cursor", false), kv("loaded", false))
 		return exitRefuse
 	}
 	if why := motionRefused(facts, drv, selectWhy, inspected); why != "" {
@@ -158,7 +173,7 @@ func realMain(args []string) int {
 		return exitAbort
 	}
 	lg.Line("init", kv("ok", true), kv("loaded", true), kv("attempt", 1), kv("name", baseName(inspected.Abs)))
-	reason := execute(ctx, lg, dd, place)
+	reason := execute(ctx, lg, dd, place, part)
 	closeErr := dd.Close()
 	lg.Line("close", kv("err", errText(closeErr)))
 	lg.Line("done", kv("exit", reason), kv("probe_moved_cursor", true), kv("loaded", true))

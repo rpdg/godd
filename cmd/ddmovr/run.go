@@ -22,6 +22,7 @@ type runner struct {
 	gain  float64
 	gainN int
 	stop  string
+	part  string
 
 	unitMin, unitMax float64
 	unitN            int
@@ -31,8 +32,8 @@ type runner struct {
 	shots            int
 }
 
-func execute(ctx context.Context, log *lineLog, dd *godd.DD, place Placement) string {
-	r := &runner{ctx: ctx, log: log, dd: dd, place: place}
+func execute(ctx context.Context, log *lineLog, dd *godd.DD, place Placement, part string) string {
+	r := &runner{ctx: ctx, log: log, dd: dd, place: place, part: part}
 	saved, err := cursorPos()
 	if err != nil {
 		log.Line("setup", kv("op", "GetCursorPos"), kv("err", err.Error()))
@@ -61,12 +62,18 @@ func execute(ctx context.Context, log *lineLog, dd *godd.DD, place Placement) st
 	}
 	log.Line("control", kv("ok", true), kv("at", coord(got)), kv("settle", ControlSettle.String()))
 
-	r.early()
-	r.axis(50)
-	r.diagonals()
-	r.axis(200)
-	r.bursts()
-	r.loops()
+	if part == PartSmall {
+		log.Line("part", kv("name", PartSmall), kv("full_matrix_pass", false), kv("kept_failure", "axis+x200"), kv("runs", "bursts,loops"))
+		r.bursts()
+		r.loops()
+	} else {
+		r.early()
+		r.axis(50)
+		r.diagonals()
+		r.axis(200)
+		r.bursts()
+		r.loops()
+	}
 	r.summary()
 	return r.stop
 }
@@ -77,8 +84,14 @@ func (r *runner) summary() {
 		minR = fmt.Sprintf("%.4f", r.unitMin)
 		maxR = fmt.Sprintf("%.4f", r.unitMax)
 	}
+	note := "exit 0 means the plan finished; it does not mean every loop converged or that winput is accepted"
+	if r.part == PartSmall {
+		note = "small part only; exit 0 does not pass the axis 200 trials or the full matrix, and it does not accept winput"
+	}
 	r.log.Line("summary",
+		kv("part", r.part),
 		kv("plan_complete", r.stop == ""),
+		kv("full_matrix_pass", false),
 		kv("abort", r.stop),
 		kv("shots", r.shots),
 		kv("unit_samples", r.unitN),
@@ -88,7 +101,7 @@ func (r *runner) summary() {
 		kv("converged", r.converged),
 		kv("skipped", r.skipped),
 		kv("gain", fmt.Sprintf("%.4f", r.gain)),
-		kv("note", "exit 0 means the plan finished; it does not mean every loop converged or that winput is accepted"),
+		kv("note", note),
 	)
 }
 
@@ -355,7 +368,7 @@ func (r *runner) oneBurst(b Burst) {
 			return
 		}
 		ret, callErr, dt := r.move(b.DX, b.DY)
-		if r.stop == ExitInterrupted {
+		if r.stopped() {
 			return
 		}
 		after, aerr := cursorPos()
@@ -470,8 +483,8 @@ func (r *runner) oneLoop(m Move) {
 		reqX, reqY := StepRequest(remX, remY, MaxStepPx)
 		t0 := time.Now()
 		ret, callErr, dt := r.move(reqX, reqY)
-		if r.stop == ExitInterrupted {
-			reason = ExitInterrupted
+		if r.stopped() {
+			reason = r.stop
 			break
 		}
 		after, aerr := cursorPos()
@@ -572,6 +585,11 @@ func (r *runner) move(dx, dy int) (int32, error, time.Duration) {
 	if err := r.ctx.Err(); err != nil {
 		r.stop = ExitInterrupted
 		return 0, err, 0
+	}
+	if r.part == PartSmall && !WithinStepCap(dx, dy, MaxStepPx) {
+		r.stop = ExitStepCap
+		r.log.Line("step-cap", kv("req", coord(Point{dx, dy})), kv("max_step_px", MaxStepPx))
+		return 0, nil, 0
 	}
 	t := time.Now()
 	err := r.dd.MoveRelative(dx, dy)

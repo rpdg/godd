@@ -211,7 +211,7 @@ func TestRatiosSignAndAbortClass(t *testing.T) {
 	if SignConflict([]AxisObs{{ReqX: 10, ObsX: -1}}) {
 		t.Fatal("one pixel against the request is not a ladder stop")
 	}
-	for _, reason := range []string{ExitAPI, ExitEdge, ExitLeftMonitor, ExitDiverged, ExitAnomaly, ExitContaminated, ExitNoDisplacement, ExitInterrupted, ExitEdgeRisk, ExitControl} {
+	for _, reason := range []string{ExitAPI, ExitEdge, ExitLeftMonitor, ExitDiverged, ExitAnomaly, ExitContaminated, ExitNoDisplacement, ExitInterrupted, ExitEdgeRisk, ExitControl, ExitStepCap} {
 		if !AbortsRun(reason) {
 			t.Errorf("%s should abort", reason)
 		}
@@ -399,10 +399,104 @@ func TestProtocolIsFixedBeforeMotion(t *testing.T) {
 		"20ms and 80ms differ by at most 1px",
 		"positive and negative requests both count",
 		"a zero request axis does not",
+		"step-cap",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("protocol missing %q", want)
 		}
+	}
+}
+
+func TestSmallPartKeepsAxis200Failure(t *testing.T) {
+	part, ok := ParsePart("")
+	if !ok || part != PartMatrix {
+		t.Fatalf("empty = %q %v", part, ok)
+	}
+	part, ok = ParsePart(PartMatrix)
+	if !ok || part != PartMatrix {
+		t.Fatalf("matrix = %q %v", part, ok)
+	}
+	part, ok = ParsePart(PartSmall)
+	if !ok || part != PartSmall {
+		t.Fatalf("small = %q %v", part, ok)
+	}
+	for _, bad := range []string{"SMALL", "full", "matrix ", "small ", "200"} {
+		if _, ok := ParsePart(bad); ok {
+			t.Fatalf("%q was accepted", bad)
+		}
+	}
+	if !SmallRequestsWithinCap() {
+		t.Fatal("planned small-part requests exceed max_step_px")
+	}
+	if !WithinStepCap(MaxStepPx, -MaxStepPx, MaxStepPx) {
+		t.Fatal("40px boundary should fit")
+	}
+	if WithinStepCap(MaxStepPx+1, 0, MaxStepPx) || WithinStepCap(0, -(MaxStepPx+1), MaxStepPx) {
+		t.Fatal("one pixel past 40 was accepted")
+	}
+	var sawLarge bool
+	for _, m := range LoopTrials() {
+		if Chebyshev(m.DX, m.DY) > MaxStepPx {
+			sawLarge = true
+		}
+		if strings.Contains(m.Name, "200") {
+			t.Fatalf("loop named a 200 trial: %s", m.Name)
+		}
+		remX, remY := m.DX, m.DY
+		for step := 0; step < MaxSteps; step++ {
+			if abs(remX) <= TolerancePx && abs(remY) <= TolerancePx {
+				break
+			}
+			sx, sy := StepRequest(remX, remY, MaxStepPx)
+			if !WithinStepCap(sx, sy, MaxStepPx) {
+				t.Fatalf("%s step %d,%d exceeds %d", m.Name, sx, sy, MaxStepPx)
+			}
+			remX -= sx
+			remY -= sy
+		}
+	}
+	if !sawLarge {
+		t.Fatal("the six loops must still include a target larger than one step")
+	}
+	if len(LoopTrials()) != 6 || len(BurstTrials()) != 4 {
+		t.Fatalf("loops=%d bursts=%d", len(LoopTrials()), len(BurstTrials()))
+	}
+	for _, b := range BurstTrials() {
+		if !WithinStepCap(b.DX, b.DY, MaxStepPx) {
+			t.Fatalf("%s request %d,%d", b.Name, b.DX, b.DY)
+		}
+		if strings.Contains(b.Name, "200") {
+			t.Fatalf("burst named a 200 trial: %s", b.Name)
+		}
+	}
+	found := false
+	for _, m := range AxisTrials() {
+		if m.Name == "axis+x200" && m.DX == 200 && m.DY == 0 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("the matrix no longer contains axis+x200")
+	}
+	if !AbortsRun(ExitStepCap) {
+		t.Fatal("step-cap must abort the run")
+	}
+	if AbortsRun(ExitConverged) || AbortsRun(ExitSkipped) {
+		t.Fatal("a finished or skipped trial must not abort the run")
+	}
+	text := strings.Join(SmallPartLines(), "\n")
+	for _, want := range []string{
+		"part=small runs=bursts,loops",
+		"nonclaim=omitting axis 200 is not a full matrix pass",
+		"kept_failure=axis+x200 remains the recorded failure in ddmovr-run-2.log",
+		"step_cap=every DD_movR in this part is at most max_step_px",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("small lines missing %q", want)
+		}
+	}
+	if TolerancePx != 1 || MaxSteps != 12 || MaxStepPx != 40 || TrialTimeout != 3*time.Second || InterStep != 16*time.Millisecond {
+		t.Fatal("pass limits changed")
 	}
 }
 

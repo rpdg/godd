@@ -44,6 +44,12 @@ const (
 	ExitNoDisplacement = "no-displacement"
 	ExitEdgeRisk       = "edge-risk"
 	ExitControl        = "control-failed"
+	ExitStepCap        = "step-cap"
+)
+
+const (
+	PartMatrix = "matrix"
+	PartSmall  = "small"
 )
 
 const (
@@ -62,7 +68,8 @@ const (
 func AbortsRun(reason string) bool {
 	switch reason {
 	case ExitAPI, ExitEdge, ExitLeftMonitor, ExitDiverged, ExitAnomaly,
-		ExitContaminated, ExitNoDisplacement, ExitInterrupted, ExitEdgeRisk, ExitControl:
+		ExitContaminated, ExitNoDisplacement, ExitInterrupted, ExitEdgeRisk, ExitControl,
+		ExitStepCap:
 		return true
 	default:
 		return false
@@ -269,6 +276,62 @@ func Clamp(v, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+// ParsePart accepts the full matrix or the small-step part. An empty value
+// stays the matrix so an older command does not silently drop trials.
+func ParsePart(s string) (string, bool) {
+	switch s {
+	case "", PartMatrix:
+		return PartMatrix, true
+	case PartSmall:
+		return PartSmall, true
+	default:
+		return "", false
+	}
+}
+
+// WithinStepCap reports whether one DD_movR request is inside the closed-loop
+// step limit on both axes. The limit is MaxStepPx and is not a pass tolerance.
+func WithinStepCap(dx, dy, cap int) bool {
+	return abs(dx) <= cap && abs(dy) <= cap
+}
+
+// SmallRequestsWithinCap reports whether every call the small part can issue
+// stays within MaxStepPx. Burst requests are checked as written. Loop requests
+// are checked after StepRequest. A true result is not a full-matrix pass.
+func SmallRequestsWithinCap() bool {
+	for _, b := range BurstTrials() {
+		if !WithinStepCap(b.DX, b.DY, MaxStepPx) {
+			return false
+		}
+	}
+	for _, m := range LoopTrials() {
+		remX, remY := m.DX, m.DY
+		for step := 0; step < MaxSteps; step++ {
+			if abs(remX) <= TolerancePx && abs(remY) <= TolerancePx {
+				break
+			}
+			sx, sy := StepRequest(remX, remY, MaxStepPx)
+			if !WithinStepCap(sx, sy, MaxStepPx) {
+				return false
+			}
+			remX -= sx
+			remY -= sy
+		}
+	}
+	return true
+}
+
+// SmallPartLines is printed only for -part small. It does not change the
+// shared pass limits, and it does not treat the omitted ±200 trials as passed.
+func SmallPartLines() []string {
+	return []string{
+		"part=small runs=bursts,loops",
+		"nonclaim=omitting axis 200 is not a full matrix pass",
+		"kept_failure=axis+x200 remains the recorded failure in ddmovr-run-2.log",
+		"step_cap=every DD_movR in this part is at most max_step_px",
+	}
 }
 
 // StepRequest caps one closed-loop correction. The cap is what makes a long
@@ -624,7 +687,7 @@ func ProtocolLines() []string {
 		"pass_converged=abs error <= tolerance on both axes, within max_steps and trial_timeout, every sample inside the safe rect, wrapper ret 1",
 		"pass_unit_sample=wrapper ret 1, sample stayed in the safe rect, 20ms and 80ms differ by at most 1px per axis, crosstalk <= 1px",
 		"immediate=0ms and 80ms differ by at most 1px per axis; a 0ms sample still at the start does not by itself make settled false",
-		"run_abort=api-error edge left-monitor diverged anomaly-delta contaminated no-displacement interrupted edge-risk control-failed",
+		"run_abort=api-error edge left-monitor diverged anomaly-delta contaminated no-displacement interrupted edge-risk control-failed step-cap",
 		"not_run_abort=converged max-steps timeout skipped-clearance",
 		"exit_priority=converged,timeout,max-steps",
 		"sign_stop=after +/-10, motion against the requested axis by more than 1px stops the run; positive and negative requests both count; a zero request axis does not; one call aborts immediately only when inversion exceeds anomaly_slack_px",

@@ -25,7 +25,7 @@ The inventory log repeats them on `[protocol]` lines.
 | Ladder | Axis counts 1, 10, 50, 200 in both signs. Diagonals only at ±50 |
 | Loops | Short `(30,0)`, `(0,-25)`, `(-20,15)`. Long `(240,0)`, `(0,180)`, `(-160,120)` |
 | Edge margin | 80 px. Trials that do not fit are skipped. A cursor on the clamp edge aborts the run |
-| Run abort | `api-error`, `edge`, `left-monitor`, `diverged`, `anomaly-delta`, `contaminated`, `no-displacement`, `interrupted`, `edge-risk`, `control-failed` |
+| Run abort | `api-error`, `edge`, `left-monitor`, `diverged`, `anomaly-delta`, `contaminated`, `no-displacement`, `interrupted`, `edge-risk`, `control-failed`, `step-cap` |
 | Not a run abort | `converged`, `max-steps`, `timeout`, `skipped-clearance` |
 | Exit priority | `converged`, then `timeout`, then `max-steps` |
 | Retry | None. A trial runs at most once. An anomaly stops the process |
@@ -33,7 +33,11 @@ The inventory log repeats them on `[protocol]` lines.
 
 Exit 0 means the plan finished. It does not mean every loop converged. Exit 1
 is an abort. Exit 2 is a refusal before motion (usage, a DLL the wrapper
-cannot resolve, DPI, or the driver). Exit 130 is Ctrl+C.
+cannot resolve, DPI, or the driver). Exit 130 is Ctrl+C. `step-cap` aborts
+only a `-part small` call that would exceed 40 px, and it does so before
+`DD_movR`. The 1 px tolerance, 12-step limit, 3 s trial limit, and 40 px
+closed-loop cap are unchanged. A matrix single shot still passes its listed
+request, including 200.
 
 `-run` also requires the process to be in the active console session, an
 amd64 DLL exporting `DD_btn`, `DD_key`, `DD_mov`, `DD_movR`, `DD_whl`, and
@@ -361,3 +365,126 @@ and records the result. Ctrl+C is observed between DLL calls. A call already
 inside the DLL cannot be cancelled. A 90 s kill skips that restore. Exit 0
 means the plan finished. It does not mean every loop converged, and it does
 not accept the winput trajectory. Items that do not run stay untested.
+
+## Round two record
+
+The raw log [evidence/ddmovr-run-2.log](evidence/ddmovr-run-2.log) stays as
+recorded. Its git line is `24497e2247062bffe15e7cd83ff6195f952381b8`. The log
+commit is `b43b9f956eaa64199a4f9291863296e0df359087`. This section does not
+rewrite that file and does not run the matrix again.
+
+The operating-system exit code was not obtained. `Process.ExitCode` was empty
+after `WaitForExit` returned and `HasExited` was true. The record is
+未取得. The probe token is `[done] exit=diverged`. The source return for
+that token is 1, from the `exitAbort` path. Those three facts stay separate.
+The missing operating-system code is not a reason to repeat the round.
+
+`axis+x200` requested `200,0`. At 20 ms and 80 ms the displacement was
+`-56,0`, the wrapper return was 1, and `settled` was true. The cursor was
+inside DISPLAY2, not on the clamp edge. `SameDirection` then stopped the
+process because the opposite movement was 56 px, past the 15 px slack. Gain
+stayed `1.0000` from the four ±10 samples. The summary is
+`plan_complete=false`, `loops=0`, `converged=0`, `skipped=0`. The cursor
+restore in that log returned to the position saved at the start.
+
+Requests of 1, 10, and 50 on both axes, and the four ±50 diagonals, matched
+the request at 20 ms and 80 ms with return 1. `axis-x200`, `axis+y200`,
+`axis-y200`, the four bursts, and the six loops did not run. They stay
+untested. Leaving them out is not a pass.
+
+## Parameter width
+
+This check is read-only. `godd.go` is unchanged. Nothing here asserts that
+the kernel driver truncates a wider value.
+
+`MoveRelative` calls `DD_movR` as `uintptr(uint32(x)), uintptr(uint32(y))`.
+For a value inside `int32`, that conversion keeps the low 32 bits and
+zero-extends them to `uintptr`. `200` stays `200` (`0xC8`). A negative `int`
+keeps its two's-complement low 32 bits. The Go call does not narrow either
+argument to 8 bits.
+
+The in-repository notes do not declare a `DD_movR` width. The absolute-move
+experiment in [hid-protocol-notes.md](hid-protocol-notes.md) used a guessed
+16-bit layout and did not move the cursor. Its command `0x04` note is an
+unverified button layout, not a relative-move specification. The archive
+readme already recorded above describes `DD_movR` as a relative move and
+does not give a width. No header in this repository states one.
+
+Static disassembly of `ddhid.63340.dll`, SHA-256
+`01e8db6893cf79e9e7aa3afbee76bea6c4220c4d1a2c63bc2e5b7c109fdb831e`, was done
+without `LoadLibrary`. The image base is `0x180000000`. `DD_movR` is export
+index 3, RVA `0x2480`. On the x64 calling convention, `ecx` is x and `edx`
+is y. The function copies `ecx` to `eax`, then stores only `al` and `dl`.
+The buffer passed onward begins `40 09 04 00`, then the low byte of x, the
+low byte of y, and `00`. The callee at RVA `0x1920` walks bytes already in
+that buffer and calls `WriteFile` with length 65. The `WriteFile` slot is
+the KERNEL32 import at IAT RVA `0x16b8c0`. That callee does not receive the
+original 32-bit registers, so it does not put the high 24 bits back. Both
+the null-object path and the path after the call set the return to 1, so a
+wrapper return of 1 does not show that the full 32-bit request was sent.
+
+The low byte of `200` is `0xC8`. Read as a signed 8-bit value, `0xC8` is
+`-56`, which matches the `axis+x200` displacement. That signed reading is
+an inference from the byte store plus the cursor sample. The HID report was
+not captured on the wire. No vendor document and no driver source states
+the field width. Because this DLL stores and sends only the low byte, the
+observation does not show the kernel driver truncating a wider value. The
+driver-side width stays unknown.
+
+## Large-increment boundary
+
+This plan is independent of the small-step plan below. It keeps the
+`axis+x200` failure in `docs/evidence/ddmovr-run-2.log`. It does not rerun
+the matrix, the ±200 shots, or any trial that already has a sample. The
+other three 200-count shots stay untested. Skipping them is not a full
+matrix pass, and this document does not record one. The converged rule,
+1 px tolerance, 12-step limit, 3 s trial limit, and 40 px cap are
+unchanged. `step-cap` is only the small-part guard. No public API change
+follows from the unknown driver width.
+
+## Small-step closed loop
+
+This commit does not run the small part. The desktop-idle confirmation that
+authorizes the one run below is the request to commit this plan and then
+start. It does not authorize another matrix round.
+
+`-part small` runs the four bursts and then the six loops. It does not run
+the early ladder, the 50-count axis shots, the diagonals, or any 200-count
+shot. An empty `-part` remains the full matrix, so an older command does
+not drop trials. Before `GetDD`, the process refuses with exit 2 if a burst
+request, or a closed-loop `StepRequest`, would exceed 40 px.
+`move` applies the same cap again and returns `step-cap` without calling
+the DLL. `step-cap` aborts the run. The 16 ms loop interval and the burst
+gaps of 0, 8, and 30 ms are unchanged.
+
+This part does not repeat the ±10 ladder. Gain therefore starts at 0, and
+`Admit` still floors a gain below 1 up to 1. That floor matches the
+round-two ratio `1.0000`; it is not a new measurement. A later burst can
+still raise gain. A loop that no longer fits is `skipped-clearance`, which
+is not a pass and not a run abort.
+
+The new log is `docs/evidence/ddmovr-small.log`, created with `O_EXCL`.
+`docs/evidence/ddmovr-run.log` and `docs/evidence/ddmovr-run-2.log` are not
+overwritten. The DLL and the running driver are hashed again immediately
+before the process. The expected DLL SHA-256 is
+`01e8db6893cf79e9e7aa3afbee76bea6c4220c4d1a2c63bc2e5b7c109fdb831e`. The
+expected driver and DriverStore SHA-256 is
+`fbe510402b3822c63e94752051b7d5895b67875f22ec48593de19764a649f8b1`. A
+mismatch or a compile failure stops the run. One process calls `GetDD`
+once. The outer limit is 90 s and kills only that process. There is no
+retry.
+
+```powershell
+go build -o $env:TEMP\ddmovr-small.exe ./cmd/ddmovr
+& $env:TEMP\ddmovr-small.exe -part small -dll <absolute path of the pinned DLL> -log docs/evidence/ddmovr-small.log -run -confirm-idle -wait 5s
+```
+
+The operating-system exit code is `System.Diagnostics.Process.ExitCode`
+with `UseShellExecute` false. If that value is absent, the record says
+未取得. The `[done]` token and the source return are listed separately.
+An empty stop returns 0, `interrupted` returns 130, and any other stop
+returns 1. Exit 0 of this part does not pass the axis 200 trials or the
+full matrix, and it does not accept the winput trajectory. The summary
+field `full_matrix_pass` is false on both parts so it cannot be read as
+that pass. A normal return tries to restore the cursor saved at the start
+of motion. A 90 s kill skips that restore.
