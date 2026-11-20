@@ -72,10 +72,10 @@ go run ./cmd/ddmovr -dll <candidate-dll> -log docs/evidence/ddmovr-run.log -run 
 
 `-run` without `-confirm-idle` exits 2 before the wait. The probe no longer
 refuses a DLL because its build number differs from the running driver. That
-is not permission to load it. The one authorized `hid.72000.dll` initialization
-attempt is stopped before execution; see the phased plan. The mouse matrix
-stays stopped. Desktop-idle confirmation remains required before any later
-load.
+is not permission to load it. The pinned initialization file is
+`ddhid.63340.dll`, and its full SHA-256 is recorded below. `cmd/ddinit` is
+the one-shot loader. It does not run the mouse matrix. Desktop-idle
+confirmation is still required before that load.
 
 ## Archive listing
 
@@ -121,10 +121,11 @@ or different number is not a compatibility result. Earlier `63340` and
 ## Candidate registration
 
 This record is separate from the 2026-11-12 `MoveRelative(50,50)` result and
-from the simple-mode `ERROR_GEN_FAILURE` result. The current probe is this
-commit: it records filename and version numbers and does not use them as a
-load gate. Parent `5b7c7a84490178b43e413159cb17b7110d159b80` is the earlier
-inventory commit. It is not the current probe.
+from the simple-mode `ERROR_GEN_FAILURE` result. Parent
+`686939ea61038f85fdb72c1228289d049bdf1425` records filename and version
+numbers and does not use them as a load gate. Parent
+`5b7c7a84490178b43e413159cb17b7110d159b80` is the earlier inventory commit.
+Neither commit registers `ddhid.63340.dll`. This commit does.
 
 | Role | File | SHA-256 |
 | --- | --- | --- |
@@ -181,25 +182,67 @@ the value returns to 32 when the handle closes. The same path then writes two
 wrapper returns success only when that path returns 100. What those reports
 change inside the running driver was not measured.
 
-That call is enough to stop. A successful initialization cannot be guaranteed
-to leave the environment unchanged. The installer was not run. One load would
-not be retried, and a later success would still not be compatibility
-acceptance.
+That call is enough to leave `hid.72000.dll` unloaded. The installer was not
+run. One load of that file would not be retried, and a later success would
+still not be compatibility acceptance.
+
+## Pinned DLL
+
+The initialization candidate is the local file `ddhid.63340.dll`. It is not
+part of the git tree. Its full SHA-256 is
+`01e8db6893cf79e9e7aa3afbee76bea6c4220c4d1a2c63bc2e5b7c109fdb831e`.
+The file is 2242088 bytes, last modified `2026-04-17T02:38:44+08:00`, and
+amd64. `FileVersion`, `ProductVersion`, `OriginalFilename`,
+`FileDescription`, `ProductName`, and `InternalName` are `ddhid63340`.
+The company string is `www.ddxoft.com`. The export names are `DD_btn`,
+`DD_key`, `DD_mov`, `DD_movR`, `DD_str`, `DD_todc`, and `DD_whl`.
+
+The running driver is still `ddhid63340.sys`, SHA-256
+`fbe510402b3822c63e94752051b7d5895b67875f22ec48593de19764a649f8b1`,
+modified `2026-04-10T12:05:05+08:00`. The shared `ddhid63340` text is a
+recorded token. It does not prove that this driver accepts this DLL. The
+Windows 11 table does not include this DLL hash, so those results are not a
+measurement of this file.
+
+The image contains no `.sys` path and no service-install import. `DD_btn(0)`
+opens a HID collection, calls `HidD_SetNumInputBuffers(handle, 10)`, writes
+two 65-byte reports beginning `40 09 88` and `40 09 89`, and waits up to
+`0x1444` ms. The wrapper treats return 100 as code 1. An internal status of 7
+calls `MessageBoxA`. The disassembly that was read does not show
+`RegSetValueEx`, `CopyFile`, `ShellExecute`, or `SystemParametersInfo` on
+this path. Those names are still present elsewhere in the import table.
+
+The operator accepted the input-buffer side effect for this DLL only: the
+count may change and may remain after the handle closes. That acceptance
+does not allow installing or replacing a driver, or changing any other system
+configuration. The DLL has not been loaded.
+
+`cmd/ddinit` checks the file name and the full SHA-256 before `LoadLibrary`.
+Without `-confirm-idle` it records the hash and exits 2. With `-confirm-idle`
+it makes one `GetDD` call in its own process, then `Close`. The default
+timeout is 20s. A timeout or any other failure stops the process, and the
+command does not retry. Exit 0 means this process observed code 1 and a
+successful `Close`. It does not accept the DLL as compatible, and it does not
+start the mouse matrix.
+
+```powershell
+go run ./cmd/ddinit -dll ddhid.63340.dll -log docs/evidence/ddinit.log -confirm-idle
+```
 
 ## Phased plan
 
-1. **Identity, done.** The candidate hash and the running-driver hash are
-   registered with this probe commit. Parent `5b7c7a8` is the earlier
-   inventory, not this probe version.
-2. **Driver setup, stopped.** Do not run `install.bat`, `ddc.exe`, or the
-   INF. That would install or update `ddhid72000.sys`.
-3. **Load and `DD_btn(0)`, stopped before execution.** One attempt was
-   authorized. Desktop-idle confirmation was still required and was not given.
-   The init review above shows the call can change the HID input-buffer count.
-   The DLL was not loaded. No retry.
-4. **Mouse matrix, not authorized.** Only after a completed stage 3, with
-   another idle confirmation, using the existing `ddmovr -run` limits. One
-   pass, then stop on an anomaly. Not started.
+1. **Identity, done.** This commit registers the pinned DLL hash above.
+   Parent `686939e` is the load-gate change. Parent `5b7c7a8` is the
+   inventory. Neither is this registration.
+2. **Driver setup, stopped.** Do not run an installer, INF, or service
+   change. Do not replace `ddhid63340.sys`.
+3. **Load and `DD_btn(0)`, waiting for desktop idle.** One attempt is
+   authorized for `ddhid.63340.dll` and for the input-buffer side effect
+   only. `cmd/ddinit` is the process. It has not been run. An explicit
+   desktop-idle confirmation is still required. No retry.
+4. **Mouse matrix, not authorized.** Only after the initialization log is
+   delivered, with another idle confirmation, using the existing `ddmovr -run`
+   limits. Not started.
 
 ## Inventory
 
@@ -208,8 +251,8 @@ Public log: [evidence/ddmovr-inventory.log](evidence/ddmovr-inventory.log).
 The log records `probe_moved_cursor=false` and `loaded=false`. No `DD_movR`
 call was made. Pointer speed, enhanced pointer precision, DPI, and the driver
 service were read and not written. The log's git line and `[source]` hashes
-belong to parent `5b7c7a8`. They are not the current probe. This commit is
-the current probe.
+belong to `5b7c7a8`. Parent `686939e` is the load-gate change. This commit
+registers `ddhid.63340.dll`. The inventory log is not that registration.
 
 ### Observed
 

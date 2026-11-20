@@ -33,13 +33,15 @@ the driver from the same official package; do not mix releases.
 ## Diagnostic tools
 
 All tools are separate `main` packages so they never become part of the public
-library API. They accept the DLL path explicitly; no DLL name is hard-coded in
-the repository documentation or tests.
+library API. They accept the DLL path explicitly. `cmd/ddinit` also requires
+the pinned file name and SHA-256 in [dd-movr-relative.md](dd-movr-relative.md).
+The other tools do not hard-code a DLL name.
 
 | Tool | Purpose |
 | --- | --- |
 | `cmd/ddprobe` | Minimal wrapper-level probe: cursor control, relative/absolute move, buttons, wheel, key injection, `ToDDCode`, `Close`, and terminal singleton behavior. |
 | `cmd/ddmovr` | `DD_movR` sign, magnitude, call-interval, and capped closed-loop probe. Inventory does not move the cursor. See [dd-movr-relative.md](dd-movr-relative.md). |
+| `cmd/ddinit` | One `GetDD` / `DD_btn(0)` / `Close` for the pinned `ddhid.63340.dll` hash in [dd-movr-relative.md](dd-movr-relative.md). It does not run the mouse matrix. |
 | `cmd/dde2e` | GUI integration test: creates a window and edit control, moves/clicks with DD, then verifies focus and text produced by `DD_str`, `PressHotkey`, `PressKey`, and `ToDDCode`. |
 | `cmd/ddutf8` | Calls the vendor `DD_str` export with raw byte sequences and reads the edit text back, documenting ASCII, UTF-8, GBK, control-byte, and NUL handling. |
 | `cmd/hidprobe` | Low-level HID inspection without loading the vendor DLL: enumerate collections, query caps, test access/share modes, and write raw vendor reports. |
