@@ -389,8 +389,10 @@ restore in that log returned to the position saved at the start.
 
 Requests of 1, 10, and 50 on both axes, and the four ±50 diagonals, matched
 the request at 20 ms and 80 ms with return 1. `axis-x200`, `axis+y200`,
-`axis-y200`, the four bursts, and the six loops did not run. They stay
-untested. Leaving them out is not a pass.
+`axis-y200`, the four bursts, and the six loops did not run in this log.
+Leaving them out is not a pass. The bursts and six loops were measured
+later in the small-step result. The three remaining 200-count shots stay
+untested, and the `axis+x200` failure stays here.
 
 ## Parameter width
 
@@ -488,3 +490,72 @@ full matrix, and it does not accept the winput trajectory. The summary
 field `full_matrix_pass` is false on both parts so it cannot be read as
 that pass. A normal return tries to restore the cursor saved at the start
 of motion. A 90 s kill skips that restore.
+
+## Small-step result
+
+The plan section above is the text committed before the run. The raw log
+[evidence/ddmovr-small.log](evidence/ddmovr-small.log) stays as recorded.
+Its git line is `8f5b5975ed2cb4f915aa579901b19e6069a1afba`, the probe
+commit that ran. The log commit is
+`b8e1dfdff8c8bbd5ecab27b0d4fbf7585ec373a7`. This section does not rewrite
+that file and does not rerun the part.
+
+The DLL is `ddhid.63340.dll`, size 2242088, SHA-256
+`01e8db6893cf79e9e7aa3afbee76bea6c4220c4d1a2c63bc2e5b7c109fdb831e`.
+The running driver `ddhid63340.sys` and its DriverStore copy are size
+1190080, SHA-256
+`fbe510402b3822c63e94752051b7d5895b67875f22ec48593de19764a649f8b1`,
+with `store_agree=equal`. `godd.go` in the run commit is SHA-256
+`2874c7d3d71036bc62638e8373635e278c5fea1fcc1cf2fc3e9ef1429aec4e59`.
+The two integration limits below belong to this DLL hash and this driver
+hash on this run. They are not a contract for every DLL version.
+
+The operating-system exit code is 0, from
+`System.Diagnostics.Process.ExitCode`, with `HasExited` true and the 90 s
+limit not reached. The probe token is `[done] exit` empty. The source
+return for an empty stop is 0. Those are separate records.
+
+`part=small`, `plan_complete=true`, `full_matrix_pass=false`, `abort`
+empty, `shots=38`, `loops=6`, `converged=6`, `skipped=0`, `gain=1.0000`.
+Init ran once. Close had an empty error. Restore returned the cursor to
+`(-1302,510)`. A finished small part is not a full matrix pass and does
+not accept the winput trajectory.
+
+`axis+x200` remains the recorded failure in
+[evidence/ddmovr-run-2.log](evidence/ddmovr-run-2.log): request `200,0`
+moved `-56,0` at 20 ms and 80 ms, the wrapper returned 1, and the run
+then stopped with `diverged`. `axis-x200`, `axis+y200`, and `axis-y200`
+did not run. `rem_before=200,0` on `loop-long+x` step 2 is the remaining
+error. That call requested `40,0`.
+
+The four bursts each returned 1. The three `(+20,0)` bursts, five calls
+at gaps 0, 8 ms, and 30 ms, were at `+100,0` by 50 ms and still there at
+150 ms. The `(-15,+15)` burst was at `-75,+75` on both late samples.
+No burst displacement exceeded the sum of its requests.
+
+The six loops converged with error `0,0` and wrapper return 1 on every
+step. Short `(30,0)`, `(0,-25)`, and `(-20,15)` took one step. Long
+`(240,0)` took six steps of 40 px in 116 ms. `(0,180)` took four steps of
+40 px and one step of 20 px in 114 ms. `(-160,120)` took four steps in
+76 ms. Every closed-loop request was at most 40 px on each axis.
+
+### Integration limits for this hash
+
+These two limits are what a later caller can take from this run. They do
+not extend to other DLL versions, other driver hashes, or a request this
+run did not make.
+
+Each axis of a closed-loop `DD_movR` in this run was at most 40 px. The
+bursts stayed inside that same per-axis cap, at 20 px and at 15 px. The
+small-step pass does not cover a larger single request. The `+200` to
+`-56` failure on this same DLL remains in force.
+
+The cursor position read immediately after `DD_movR` returned was still
+the pre-call position on all 38 calls, while the wrapper return was 1.
+The requested quantum appeared on a later sample: the next burst read, the
+loop sample after the 16 ms interval, or the burst sample at 50 ms. The
+50 ms and 150 ms burst positions agreed. A caller must not treat that
+immediate coordinate as the result and send the same increment again.
+That would stack a second request on a move the first sample had not
+shown yet. The lag is an observation of this DLL on this run, not a
+timing contract for every build.
