@@ -1,0 +1,143 @@
+[protocol] item="probe=ddmovr purpose=DD_movR relative displacement and a capped closed-loop measurement"
+[protocol] item="nonclaim=probe algorithm is not a godd API and is not the winput trajectory"
+[protocol] item="nonclaim=a converged token does not accept a later winput change"
+[protocol] item="nonclaim=one (+50,+50) sample is not a convergence result"
+[protocol] item="tolerance_px=1"
+[protocol] item="max_steps=12"
+[protocol] item="trial_timeout=3s"
+[protocol] item="max_step_px=40"
+[protocol] item="inter_step=16ms"
+[protocol] item="admission_headroom=2"
+[protocol] item="edge_margin_px=80"
+[protocol] item="anomaly_slack_px=15"
+[protocol] item="hard_gain=8"
+[protocol] item="samples_ms=0,20,80"
+[protocol] item="burst_gaps_ms=0,8,30"
+[protocol] item="burst_count=5"
+[protocol] item="pass_converged=abs error <= tolerance on both axes, within max_steps and trial_timeout, every sample inside the safe rect, wrapper ret 1"
+[protocol] item="pass_unit_sample=wrapper ret 1, sample stayed in the safe rect, 20ms and 80ms differ by at most 1px per axis, crosstalk <= 1px"
+[protocol] item="immediate=0ms and 80ms differ by at most 1px per axis; a 0ms sample still at the start does not by itself make settled false"
+[protocol] item="run_abort=api-error edge left-monitor diverged anomaly-delta contaminated no-displacement interrupted edge-risk control-failed step-cap"
+[protocol] item="not_run_abort=converged max-steps timeout skipped-clearance"
+[protocol] item="exit_priority=converged,timeout,max-steps"
+[protocol] item="sign_stop=after +/-10, motion against the requested axis by more than 1px stops the run; positive and negative requests both count; a zero request axis does not; one call aborts immediately only when inversion exceeds anomaly_slack_px"
+[protocol] item="reposition_settle=100ms"
+[protocol] item="control_settle=250ms"
+[protocol] item="idle=5x100ms"
+[protocol] item="no_retry=each trial runs at most once"
+[protocol] item="interrupt=Ctrl+C is observed between DLL calls; a call inside the DLL cannot be cancelled; killing the process skips cursor restore"
+[protocol] item="environment=no pointer, DPI, driver, or package change; this process may call SetProcessDPIAware"
+[protocol] item="reposition=SetCursorPos returns to home between trials; closed-loop steps call only DD_movR"
+[protocol] item="wrapper_ret=MoveRelative nil is logged as ret 1; other codes are parsed from the wrapper error"
+[protocol] item="tokens=filename and version numbers are recorded; a difference does not refuse the run, and a match does not prove driver compatibility"
+[protocol] item="exports=the godd export set is checked so the wrapper can resolve them; matching exports do not prove the installed driver accepts the DLL"
+[protocol] item="pointer_guard=SPI speed and enhancement are compared again after the idle check; a difference aborts before motion"
+[protocol] item="part=small runs=bursts,loops"
+[protocol] item="nonclaim=omitting axis 200 is not a full matrix pass"
+[protocol] item="kept_failure=axis+x200 remains the recorded failure in ddmovr-run-2.log"
+[protocol] item="step_cap=every DD_movR in this part is at most max_step_px"
+[git] commit=8f5b5975ed2cb4f915aa579901b19e6069a1afba branch=master status="?? docs/evidence/ddmovr-small.log" err=""
+[source] path=cmd/ddmovr/identify.go sha256=ab66435ed28c5aa3714400c45ebf6e1c4bec36ff1cc080b3112c8b554f99de27 err=""
+[source] path=cmd/ddmovr/log.go sha256=ff13a479e01ea01e4fe00515159ed02d78f214903f10b174909be970dfea2882 err=""
+[source] path=cmd/ddmovr/log_test.go sha256=17854493ead5fcbb83fe6c6b12af79b2d97d1d1169b716639725fd5bc9dfa39b err=""
+[source] path=cmd/ddmovr/main.go sha256=adf3e0e0e49085f175d9d73b3a8648a50da7c4722d8af403d05b7f52d8e82bab err=""
+[source] path=cmd/ddmovr/pe.go sha256=e1198c1c817c9fac3a2f33baa2425c4f6d90d029def0bda66913feee4120c81e err=""
+[source] path=cmd/ddmovr/pe_test.go sha256=fdf88feb6b37153e522f403d69d480618854907f854343f210f6cfac27ed0cc7 err=""
+[source] path=cmd/ddmovr/plan.go sha256=31613539c4f06ba1a1a731784d8ba7bcc3eaa611241adc9c7f229661225f86a0 err=""
+[source] path=cmd/ddmovr/plan_test.go sha256=15ba86993c20572a93a9ea7d1d178ddda38c7faab9633775a3e847a0b5e3815b err=""
+[source] path=cmd/ddmovr/run.go sha256=4764fe3be8dd1900cf65929973c0a050165dd25f795e3c1253b0fb9ac7ff075e err=""
+[source] path=cmd/ddmovr/sys_windows.go sha256=fe19eb4a7287823013419e922efd5db12b1e7f5193fc0ee23f40757665167a49 err=""
+[source] path=godd.go sha256=2874c7d3d71036bc62638e8373635e278c5fea1fcc1cf2fc3e9ef1429aec4e59 err=""
+[sibling] name=dd63330.dll sha256=72fba9c7721ac394a0803d0c97835b0da21c9d6dda8076fc0584a566cd7b2a9d used=false err=""
+[sibling] name=dd63xxx.7z sha256=6df4572702a6561f067530a2e0e131d64c20cafa94a45e6eb9cdd0cd550e8097 used=false err=""
+[sibling] name=ddhid.63340.dll sha256=01e8db6893cf79e9e7aa3afbee76bea6c4220c4d1a2c63bc2e5b7c109fdb831e used=true err=""
+[sibling] name=hid.7xxxx.7z sha256=728632decc9339d780c708a92f6185e86e04de5e59538aa1aca9ac68563b1b1f used=false err=""
+[env] godd_dll_set=false dll_name=ddhid.63340.dll run=true part=small confirm_idle=true
+[os] name="Windows 10 Pro" version="10.0.19044 display=21H2 ubr=1645" go=go1.26.0
+[privilege] elevated=true elevation_err="" integrity=high integrity_rid=0x3000 integrity_err="" session=6 console_session=6 console_match=true session_err=""
+[dpi] process_before=0 process_after=1 aware_ok=true system=96 system_err="" query_err=""
+[screen] virtual=-1920,0,1366,1080 cursor=-1302,510 cursor_err=""
+[monitor] i=0 name=DISPLAY1 primary=true bounds=0,0,1366,768 work=0,0,1366,728 dpi=96 note="info=true GetDpiForMonitor hr=0x0 dpi=96,96 device_caps=96"
+[monitor] i=1 name=DISPLAY2 primary=false bounds=-1920,0,0,1080 work=-1920,0,0,1040 dpi=96 note="info=true GetDpiForMonitor hr=0x0 dpi=96,96 device_caps=96"
+[pointer] spi_speed=10 spi_t1=6 spi_t2=10 spi_epp=1 spi_err="" reg_sensitivity=10 reg_speed=1 reg_t1=6 reg_t2=10 reg_err=""
+[driver] service=ddhid63340 state=running state_err="" start=3 image=ddhid63340.sys size=1190080 modified=2026-04-10T12:05:05+08:00 sha256=fbe510402b3822c63e94752051b7d5895b67875f22ec48593de19764a649f8b1 hash_err="" file_version=ddhid63340 product_version=ddhid63340 original_filename=ddhid63340 hardware_id=ddhid63340\HID_DEVICE inf_driver_ver=8.8.8.8 store_agree=equal store_sha256=fbe510402b3822c63e94752051b7d5895b67875f22ec48593de19764a649f8b1
+[driver_selected] service=ddhid63340 reason="" count=1
+[placement] ok=true monitor=DISPLAY2 home=-960,540 bounds=-1920,0,0,1080 dpi=96 safe_clear=879,459 phys_clear=959,539
+[dll] name=ddhid.63340.dll size=2242088 sha256=01e8db6893cf79e9e7aa3afbee76bea6c4220c4d1a2c63bc2e5b7c109fdb831e hash_err="" machine=amd64 exports=DD_btn,DD_key,DD_mov,DD_movR,DD_str,DD_todc,DD_whl pe_err="" file_version=ddhid63340 product_version=ddhid63340 original_filename=ddhid63340 version_err="" driver_base=ddhid63340.sys token_relation=same token_detail=63340 token_blocks_load=false token_proves_driver=false loaded=false
+[wait] duration=5s note="desktop must stay idle; Ctrl+C stops before the DLL is loaded"
+[idle] ok=true at=-1302,510 samples=5 gap=100ms
+[pointer_after] spi_speed=10 spi_t1=6 spi_t2=10 spi_epp=1 spi_err="" reg_sensitivity=10 reg_speed=1 reg_t1=6 reg_t2=10 reg_err=""
+[init] ok=true loaded=true attempt=1 name=ddhid.63340.dll
+[control] ok=true at=-960,540 settle=250ms
+[part] name=small full_matrix_pass=false kept_failure=axis+x200 runs=bursts,loops
+[burst-step] trial=burst+x-gap0 i=1 req=20,0 ret=1 ret_parsed=true err="" before=-960,540 after=-960,540 call_us=0 read_err=""
+[burst-step] trial=burst+x-gap0 i=2 req=20,0 ret=1 ret_parsed=true err="" before=-940,540 after=-940,540 call_us=301 read_err=""
+[burst-step] trial=burst+x-gap0 i=3 req=20,0 ret=1 ret_parsed=true err="" before=-920,540 after=-920,540 call_us=46 read_err=""
+[burst-step] trial=burst+x-gap0 i=4 req=20,0 ret=1 ret_parsed=true err="" before=-900,540 after=-900,540 call_us=0 read_err=""
+[burst-step] trial=burst+x-gap0 i=5 req=20,0 ret=1 ret_parsed=true err="" before=-880,540 after=-880,540 call_us=0 read_err=""
+[burst] trial=burst+x-gap0 gap=0s count=5 req_each=20,0 travel_req=100,0 start=-960,540 immediate=-880,540 delta=80,0 late50=-860,540 late150=-860,540 late_delta=20,0 read_err=""
+[gain] source=raised max_ratio=1.0000
+[burst-step] trial=burst+x-gap8 i=1 req=20,0 ret=1 ret_parsed=true err="" before=-960,540 after=-960,540 call_us=0 read_err=""
+[burst-step] trial=burst+x-gap8 i=2 req=20,0 ret=1 ret_parsed=true err="" before=-940,540 after=-940,540 call_us=0 read_err=""
+[burst-step] trial=burst+x-gap8 i=3 req=20,0 ret=1 ret_parsed=true err="" before=-920,540 after=-920,540 call_us=0 read_err=""
+[burst-step] trial=burst+x-gap8 i=4 req=20,0 ret=1 ret_parsed=true err="" before=-900,540 after=-900,540 call_us=0 read_err=""
+[burst-step] trial=burst+x-gap8 i=5 req=20,0 ret=1 ret_parsed=true err="" before=-880,540 after=-880,540 call_us=0 read_err=""
+[burst] trial=burst+x-gap8 gap=8ms count=5 req_each=20,0 travel_req=100,0 start=-960,540 immediate=-880,540 delta=80,0 late50=-860,540 late150=-860,540 late_delta=20,0 read_err=""
+[burst-step] trial=burst+x-gap30 i=1 req=20,0 ret=1 ret_parsed=true err="" before=-960,540 after=-960,540 call_us=0 read_err=""
+[burst-step] trial=burst+x-gap30 i=2 req=20,0 ret=1 ret_parsed=true err="" before=-940,540 after=-940,540 call_us=0 read_err=""
+[burst-step] trial=burst+x-gap30 i=3 req=20,0 ret=1 ret_parsed=true err="" before=-920,540 after=-920,540 call_us=0 read_err=""
+[burst-step] trial=burst+x-gap30 i=4 req=20,0 ret=1 ret_parsed=true err="" before=-900,540 after=-900,540 call_us=0 read_err=""
+[burst-step] trial=burst+x-gap30 i=5 req=20,0 ret=1 ret_parsed=true err="" before=-880,540 after=-880,540 call_us=0 read_err=""
+[burst] trial=burst+x-gap30 gap=30ms count=5 req_each=20,0 travel_req=100,0 start=-960,540 immediate=-880,540 delta=80,0 late50=-860,540 late150=-860,540 late_delta=20,0 read_err=""
+[burst-step] trial=burst-x+y-gap8 i=1 req=-15,15 ret=1 ret_parsed=true err="" before=-960,540 after=-960,540 call_us=0 read_err=""
+[burst-step] trial=burst-x+y-gap8 i=2 req=-15,15 ret=1 ret_parsed=true err="" before=-975,555 after=-975,555 call_us=0 read_err=""
+[burst-step] trial=burst-x+y-gap8 i=3 req=-15,15 ret=1 ret_parsed=true err="" before=-990,570 after=-990,570 call_us=92 read_err=""
+[burst-step] trial=burst-x+y-gap8 i=4 req=-15,15 ret=1 ret_parsed=true err="" before=-1005,585 after=-1005,585 call_us=0 read_err=""
+[burst-step] trial=burst-x+y-gap8 i=5 req=-15,15 ret=1 ret_parsed=true err="" before=-1020,600 after=-1020,600 call_us=87 read_err=""
+[burst] trial=burst-x+y-gap8 gap=8ms count=5 req_each=-15,15 travel_req=-75,75 start=-960,540 immediate=-1020,600 delta=-60,60 late50=-1035,615 late150=-1035,615 late_delta=-15,15 read_err=""
+[step] trial=loop-short+x n=1 req=30,0 ret=1 err="" before=-960,540 after=-960,540 rem_before=30,0 rem_after=30,0 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-short+x n=1 after=-960,540 settled=-930,540 delta=30,0
+[result] trial=loop-short+x exit=converged steps=1 elapsed_ms=19 target=-930,540 final=-930,540 err_px=0,0 within_1px=true winput_human_band_abs_lt_3=true
+[step] trial=loop-short-y n=1 req=0,-25 ret=1 err="" before=-960,540 after=-960,540 rem_before=0,-25 rem_after=0,-25 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-short-y n=1 after=-960,540 settled=-960,515 delta=0,-25
+[result] trial=loop-short-y exit=converged steps=1 elapsed_ms=19 target=-960,515 final=-960,515 err_px=0,0 within_1px=true winput_human_band_abs_lt_3=true
+[step] trial=loop-short-x+y n=1 req=-20,15 ret=1 err="" before=-960,540 after=-960,540 rem_before=-20,15 rem_after=-20,15 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-short-x+y n=1 after=-960,540 settled=-980,555 delta=-20,15
+[result] trial=loop-short-x+y exit=converged steps=1 elapsed_ms=22 target=-980,555 final=-980,555 err_px=0,0 within_1px=true winput_human_band_abs_lt_3=true
+[step] trial=loop-long+x n=1 req=40,0 ret=1 err="" before=-960,540 after=-960,540 rem_before=240,0 rem_after=240,0 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-long+x n=1 after=-960,540 settled=-920,540 delta=40,0
+[step] trial=loop-long+x n=2 req=40,0 ret=1 err="" before=-920,540 after=-920,540 rem_before=200,0 rem_after=200,0 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-long+x n=2 after=-920,540 settled=-880,540 delta=40,0
+[step] trial=loop-long+x n=3 req=40,0 ret=1 err="" before=-880,540 after=-880,540 rem_before=160,0 rem_after=160,0 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-long+x n=3 after=-880,540 settled=-840,540 delta=40,0
+[step] trial=loop-long+x n=4 req=40,0 ret=1 err="" before=-840,540 after=-840,540 rem_before=120,0 rem_after=120,0 call_us=187 step_ms=0 read_err=""
+[step-settle] trial=loop-long+x n=4 after=-840,540 settled=-800,540 delta=40,0
+[step] trial=loop-long+x n=5 req=40,0 ret=1 err="" before=-800,540 after=-800,540 rem_before=80,0 rem_after=80,0 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-long+x n=5 after=-800,540 settled=-760,540 delta=40,0
+[step] trial=loop-long+x n=6 req=40,0 ret=1 err="" before=-760,540 after=-760,540 rem_before=40,0 rem_after=40,0 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-long+x n=6 after=-760,540 settled=-720,540 delta=40,0
+[result] trial=loop-long+x exit=converged steps=6 elapsed_ms=116 target=-720,540 final=-720,540 err_px=0,0 within_1px=true winput_human_band_abs_lt_3=true
+[step] trial=loop-long+y n=1 req=0,40 ret=1 err="" before=-960,540 after=-960,540 rem_before=0,180 rem_after=0,180 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-long+y n=1 after=-960,540 settled=-960,580 delta=0,40
+[step] trial=loop-long+y n=2 req=0,40 ret=1 err="" before=-960,580 after=-960,580 rem_before=0,140 rem_after=0,140 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-long+y n=2 after=-960,580 settled=-960,620 delta=0,40
+[step] trial=loop-long+y n=3 req=0,40 ret=1 err="" before=-960,620 after=-960,620 rem_before=0,100 rem_after=0,100 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-long+y n=3 after=-960,620 settled=-960,660 delta=0,40
+[step] trial=loop-long+y n=4 req=0,40 ret=1 err="" before=-960,660 after=-960,660 rem_before=0,60 rem_after=0,60 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-long+y n=4 after=-960,660 settled=-960,700 delta=0,40
+[step] trial=loop-long+y n=5 req=0,20 ret=1 err="" before=-960,700 after=-960,700 rem_before=0,20 rem_after=0,20 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-long+y n=5 after=-960,700 settled=-960,720 delta=0,20
+[result] trial=loop-long+y exit=converged steps=5 elapsed_ms=114 target=-960,720 final=-960,720 err_px=0,0 within_1px=true winput_human_band_abs_lt_3=true
+[step] trial=loop-long-x+y n=1 req=-40,40 ret=1 err="" before=-960,540 after=-960,540 rem_before=-160,120 rem_after=-160,120 call_us=209 step_ms=0 read_err=""
+[step-settle] trial=loop-long-x+y n=1 after=-960,540 settled=-1000,580 delta=-40,40
+[step] trial=loop-long-x+y n=2 req=-40,40 ret=1 err="" before=-1000,580 after=-1000,580 rem_before=-120,80 rem_after=-120,80 call_us=517 step_ms=0 read_err=""
+[step-settle] trial=loop-long-x+y n=2 after=-1000,580 settled=-1040,620 delta=-40,40
+[step] trial=loop-long-x+y n=3 req=-40,40 ret=1 err="" before=-1040,620 after=-1040,620 rem_before=-80,40 rem_after=-80,40 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-long-x+y n=3 after=-1040,620 settled=-1080,660 delta=-40,40
+[step] trial=loop-long-x+y n=4 req=-40,0 ret=1 err="" before=-1080,660 after=-1080,660 rem_before=-40,0 rem_after=-40,0 call_us=0 step_ms=0 read_err=""
+[step-settle] trial=loop-long-x+y n=4 after=-1080,660 settled=-1120,660 delta=-40,0
+[result] trial=loop-long-x+y exit=converged steps=4 elapsed_ms=76 target=-1120,660 final=-1120,660 err_px=0,0 within_1px=true winput_human_band_abs_lt_3=true
+[summary] part=small plan_complete=true full_matrix_pass=false abort="" shots=38 unit_samples=0 unit_ratio_min="" unit_ratio_max="" loops=6 converged=6 skipped=0 gain=1.0000 note="small part only; exit 0 does not pass the axis 200 trials or the full matrix, and it does not accept winput"
+[restore] ok=true want=-1302,510 got=-1302,510 err=""
+[close] err=""
+[done] exit="" probe_moved_cursor=true loaded=true
